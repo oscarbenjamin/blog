@@ -10,6 +10,7 @@ Welcome to blog's documentation!
    :maxdepth: 2
    :caption: Contents:
 
+   wip/index.rst
 
 
 Indices and tables
