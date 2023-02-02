@@ -9,9 +9,11 @@
     <title>Data structures for symbolic expressions: part 1 &#8212; blog  documentation</title>
     <link rel="stylesheet" type="text/css" href="../../_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="../../_static/alabaster.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css" />
     <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
     <script src="../../_static/doctools.js"></script>
     <script src="../../_static/sphinx_highlight.js"></script>
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
     <link rel="prev" title="Work in progress pages" href="../index.html" />
@@ -37,13 +39,623 @@
 algorithms for working with symbolic expressions. The reason for this is that I
 want to change the way that SymPy’s data structures work and I need to make
 sure that lots of other people understand the design decisions that I am
-considering.</p>
-<p>Let us first use SymPy to consider what a data structure for a symbolic
-expression might look like. In SymPy we can create symbolic expressions by
-creating symbols and then calling symbolic functions on those symbols:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">x</span> <span class="o">=</span> <span class="n">symbols</span><span class="p">(</span><span class="s1">&#39;x&#39;</span><span class="p">)</span>
+considering. Firstly I need to introduce how things currently work in SymPy to
+understand the context.</p>
+<section id="the-design-of-basic">
+<h2>The design of Basic<a class="headerlink" href="#the-design-of-basic" title="Permalink to this heading">¶</a></h2>
+<p>Let’s use SymPy to consider what a data structure for a symbolic expression
+might look like. In SymPy we can create symbolic expressions by creating
+symbols and then calling symbolic functions on those symbols</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="n">symbols</span><span class="p">,</span> <span class="n">cos</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">x</span> <span class="o">=</span> <span class="n">symbols</span><span class="p">(</span><span class="s1">&#39;x&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">expr</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">cos</span><span class="p">(</span><span class="n">x</span><span class="p">))</span><span class="o">**</span><span class="mi">2</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">expr</span>
+<span class="go">(cos(x) + 1)**2</span>
 </pre></div>
 </div>
+<p>Here we have created a symbolic expression <code class="docutils literal notranslate"><span class="pre">expr</span></code> which represents the
+mathematical expression <span class="math notranslate nohighlight">\((1 + \cos{x})^2\)</span>. The expression as a data
+structure is represented as a tree where each node in the tree is particular
+function and the children are the <em>arguments</em> of that function. We can see this
+functional representation explicitly using SymPy’s <code class="docutils literal notranslate"><span class="pre">srepr</span></code> function</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="n">srepr</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">srepr</span><span class="p">(</span><span class="n">expr</span><span class="p">))</span>
+<span class="go">Pow(Add(cos(Symbol(&#39;x&#39;)), Integer(1)), Integer(2))</span>
+</pre></div>
+</div>
+<p>Here the functions are <code class="docutils literal notranslate"><span class="pre">Pow</span></code>, <code class="docutils literal notranslate"><span class="pre">Add</span></code> and <code class="docutils literal notranslate"><span class="pre">cos</span></code> and these represent
+mathematical operations and functions so e.g. <code class="docutils literal notranslate"><span class="pre">Pow(x,</span> <span class="pre">y)</span></code> represents
+<span class="math notranslate nohighlight">\(x^y\)</span>, <code class="docutils literal notranslate"><span class="pre">Add(x,</span> <span class="pre">y)</span></code> represents <span class="math notranslate nohighlight">\(x + y\)</span> and <code class="docutils literal notranslate"><span class="pre">cos</span></code> represents the
+<span class="math notranslate nohighlight">\(\cos\)</span> function. In an expression <code class="docutils literal notranslate"><span class="pre">Add(x,</span> <span class="pre">y)</span></code> we say that <code class="docutils literal notranslate"><span class="pre">Add</span></code> is
+the <em>head</em> of the expression and that <code class="docutils literal notranslate"><span class="pre">x</span></code> and <code class="docutils literal notranslate"><span class="pre">y</span></code> are the arguments. The
+other parts of the expression are <code class="docutils literal notranslate"><span class="pre">Symbol('x')</span></code> and <code class="docutils literal notranslate"><span class="pre">Integer(1)</span></code> and
+<code class="docutils literal notranslate"><span class="pre">Integer(2)</span></code>. These are the <em>atoms</em> of the expression and represent the leaf
+nodes of the expression tree. Using SymPy’s <code class="docutils literal notranslate"><span class="pre">dotprint</span></code> functon and the
+graphviz program you can make a visual representation of an expression tree
+that looks like this:</p>
+digraph{
+
+# Graph style
+&quot;ordering&quot;=&quot;out&quot;
+&quot;rankdir&quot;=&quot;TD&quot;
+
+#########
+# Nodes #
+#########
+
+&quot;Pow(Add(Integer(1), cos(Symbol('x'))), Integer(2))_()&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;Pow&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Add(Integer(1), cos(Symbol('x')))_(0,)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;Add&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Integer(1)_(0, 0)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;1&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;cos(Symbol('x'))_(0, 1)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;cos&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Symbol('x')_(0, 1, 0)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;x&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Integer(2)_(1,)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;2&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+
+#########
+# Edges #
+#########
+
+&quot;Pow(Add(Integer(1), cos(Symbol('x'))), Integer(2))_()&quot; -&gt; &quot;Add(Integer(1), cos(Symbol('x')))_(0,)&quot;;
+&quot;Pow(Add(Integer(1), cos(Symbol('x'))), Integer(2))_()&quot; -&gt; &quot;Integer(2)_(1,)&quot;;
+&quot;Add(Integer(1), cos(Symbol('x')))_(0,)&quot; -&gt; &quot;Integer(1)_(0, 0)&quot;;
+&quot;Add(Integer(1), cos(Symbol('x')))_(0,)&quot; -&gt; &quot;cos(Symbol('x'))_(0, 1)&quot;;
+&quot;cos(Symbol('x'))_(0, 1)&quot; -&gt; &quot;Symbol('x')_(0, 1, 0)&quot;;
+}
+<p>In SymPy’s terminology the expression head is known as the <code class="docutils literal notranslate"><span class="pre">func</span></code> and the
+arguments as the <code class="docutils literal notranslate"><span class="pre">args</span></code>.</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">expr</span><span class="o">.</span><span class="n">func</span>
+<span class="go">&lt;class &#39;sympy.core.power.Pow&#39;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">expr</span><span class="o">.</span><span class="n">args</span>
+<span class="go">(cos(x) + 1, 2)</span>
+</pre></div>
+</div>
+<p>Here the <code class="docutils literal notranslate"><span class="pre">func</span></code> is <code class="docutils literal notranslate"><span class="pre">Pow</span></code> and the <code class="docutils literal notranslate"><span class="pre">args</span></code> are <code class="docutils literal notranslate"><span class="pre">cos(x)</span> <span class="pre">+</span> <span class="pre">1</span></code> and <code class="docutils literal notranslate"><span class="pre">2</span></code> so
+this expression represents <code class="docutils literal notranslate"><span class="pre">Pow(cos(x)</span> <span class="pre">+</span> <span class="pre">1,</span> <span class="pre">2)</span></code> which is <span class="math notranslate nohighlight">\((\cos{x} +
+1)^2\)</span>.  Of course in turn the expression <code class="docutils literal notranslate"><span class="pre">cos(x)</span> <span class="pre">+</span> <span class="pre">1</span></code> is represented as an
+<code class="docutils literal notranslate"><span class="pre">Add</span></code> with its <code class="docutils literal notranslate"><span class="pre">args</span></code> and so on until we reach the atoms which are the
+expressions that do not have <code class="docutils literal notranslate"><span class="pre">args</span></code>. It might look like <code class="docutils literal notranslate"><span class="pre">Integer(2)</span></code> has
+the argument <code class="docutils literal notranslate"><span class="pre">1</span></code> but this is not considered to be part of the <code class="docutils literal notranslate"><span class="pre">args</span></code>:</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="n">Integer</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">Integer</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">func</span>
+<span class="go">&lt;class &#39;sympy.core.numbers.Integer&#39;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">Integer</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">args</span>
+<span class="go">()</span>
+</pre></div>
+</div>
+<p>Of course internally the <code class="docutils literal notranslate"><span class="pre">Integer(2)</span></code> object holds an ordinary Python integer
+representing the number <code class="docutils literal notranslate"><span class="pre">2</span></code> to distinguish itself from <code class="docutils literal notranslate"><span class="pre">Integer(3)</span></code> but the
+expression tree structure considers that <code class="docutils literal notranslate"><span class="pre">Integer(2)</span></code> is atomic and does not
+recursively have more children so its <code class="docutils literal notranslate"><span class="pre">args</span></code> tuple is empty.</p>
+<p>Many other symbolic computational systems use thes basic notion of a head (or
+function) and arguments as the main way to represent symbolic expressions but
+there are lots of subtle details and differences in how exactly that works.
+One thing that you might notice in the output above is that the head of a SymPy
+expression is a Python <code class="docutils literal notranslate"><span class="pre">class</span></code> object. In fact an expression of a given head
+is an <em>instance</em> of that class:</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="n">Pow</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">expr</span><span class="o">.</span><span class="n">func</span> <span class="o">==</span> <span class="n">Pow</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">expr</span><span class="p">)</span> <span class="o">==</span> <span class="n">Pow</span>
+<span class="go">True</span>
+</pre></div>
+</div>
+<p>So if <code class="docutils literal notranslate"><span class="pre">Pow</span></code> is a class then calling <code class="docutils literal notranslate"><span class="pre">Pow(x,</span> <span class="pre">y)</span></code> creates an instance of
+<code class="docutils literal notranslate"><span class="pre">Pow</span></code>. The instance can then store its arguments <code class="docutils literal notranslate"><span class="pre">x</span></code> and <code class="docutils literal notranslate"><span class="pre">y</span></code> and expose
+them back through the <code class="docutils literal notranslate"><span class="pre">args</span></code> attribute. If we want to make new expression
+heads we can make new classes. Many operations should behave differently for
+different expression heads and with classes we can add <em>methods</em> which are
+functions whose behavour can be different for each different class. This allows
+u to encode the differences between all of the different mathematical functions
+and operations when operating on symbolic expressions. Of course we want
+expressions to have a relatively uniform interface for end users so we want all
+of these different classes to present mostly the same attributes and methods
+even if they would behave differently for the different classes. To make this
+happen we use superclasses and then have lots of different subclasses that only
+change a few of those methods. In SymPy the top-level superclass is called
+<code class="docutils literal notranslate"><span class="pre">Basic</span></code> and it has many levels of subclasses in a hierarchy. A few classes
+from the top of this hierarchy are arranged like this:</p>
+digraph G {
+  Basic -&gt; {Expr, Set, Boolean};
+  Expr -&gt; {Add, Mul, Pow, Function, Number};
+  Function -&gt; {cos, sin, exp, tan};
+  Number -&gt; {Integer, Rational, Float};
+  Set -&gt; {FiniteSet, ProductSet, Union, Intersection};
+  //Boolean -&gt; {true, false, And, Or, Relational};
+  //Relational -&gt; {Eq, Ne, Lt, Le, Gt, Ge};
+}
+<p>Many of these break down further into more subclasses for example <code class="docutils literal notranslate"><span class="pre">Boolean</span></code>
+have many subclasses in another hierarchy:</p>
+digraph G {
+  Boolean -&gt; {true, false, And, Or, Relational};
+  Relational -&gt; {Eq, Ne, Lt, Le, Gt, Ge};
+}
+
+<p>The idea here is that the top-level <code class="docutils literal notranslate"><span class="pre">Basic</span></code> type defines methods that are
+common to all symbolic expressions like <code class="docutils literal notranslate"><span class="pre">subs</span></code> for substituting values. The
+next level subclasses like <code class="docutils literal notranslate"><span class="pre">Expr</span></code>, <code class="docutils literal notranslate"><span class="pre">Boolean</span></code> and <code class="docutils literal notranslate"><span class="pre">Set</span></code> define other
+methods that only make sense for the kinds of mathematical operations they
+represent. For example:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">Expr</span></code> represents things that can be added and multiplied so it defines
+methods like <code class="docutils literal notranslate"><span class="pre">__add__</span></code> and <code class="docutils literal notranslate"><span class="pre">__mul__</span></code> that will create <code class="docutils literal notranslate"><span class="pre">Add</span></code> and <code class="docutils literal notranslate"><span class="pre">Mul</span></code>
+objects when you do e.g. <code class="docutils literal notranslate"><span class="pre">expr1</span> <span class="pre">*</span> <span class="pre">expr2</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Set</span></code> represents mathematical sets and defines methods like <code class="docutils literal notranslate"><span class="pre">intersect</span></code>
+that will create <code class="docutils literal notranslate"><span class="pre">Intersection</span></code> and <code class="docutils literal notranslate"><span class="pre">Union</span></code> expressions.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Boolean</span></code> represents boolean expressions like <code class="docutils literal notranslate"><span class="pre">x</span> <span class="pre">&gt;</span> <span class="pre">2</span></code> and so <code class="docutils literal notranslate"><span class="pre">Boolean</span></code>
+defines methods like <code class="docutils literal notranslate"><span class="pre">__and__</span></code> and <code class="docutils literal notranslate"><span class="pre">__or__</span></code> which can be used to make
+<code class="docutils literal notranslate"><span class="pre">And</span></code> and <code class="docutils literal notranslate"><span class="pre">Or</span></code> expressions.</p></li>
+</ul>
+<p>Then each of these high-level <code class="docutils literal notranslate"><span class="pre">Basic</span></code> subclasses will have more subclasses
+that define more specific behaviour. For example <code class="docutils literal notranslate"><span class="pre">Gt</span></code> is for greater-than and
+<code class="docutils literal notranslate"><span class="pre">Gt(x,</span> <span class="pre">y)</span></code> represents the boolean statement <span class="math notranslate nohighlight">\(x &gt; y\)</span>. The <cite>Gt</cite> class has
+methods that can work out if the statement is true and can then evaluate to
+<code class="docutils literal notranslate"><span class="pre">true</span></code> or <code class="docutils literal notranslate"><span class="pre">false</span></code>:</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="n">Gt</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">Gt</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="go">x &gt; 1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">Gt</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<span class="go">False</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">Gt</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="go">True</span>
+</pre></div>
+</div>
+<p>The class <code class="docutils literal notranslate"><span class="pre">Lt</span></code> represents less-than and so its methods for evaluating to true
+or false need to be different from those of <code class="docutils literal notranslate"><span class="pre">Gt</span></code>. Likewise the <code class="docutils literal notranslate"><span class="pre">cos</span></code> and
+<code class="docutils literal notranslate"><span class="pre">sin</span></code> classes will have different methods for numerical evaluation and
+differentiation and so on.</p>
+<p>Using classes like this to represent expression heads has a number of
+advantages because it means that we can leverage the general techniques of
+object-oriented programming to build up all the different operations that we
+would want in a computer algebra system. However I want to use this document to
+explain why this is actually a problematic design decision. In fact in a new
+design of how SymPy’s symbolic expressions are represented we should <em>not</em> use
+classes for expression heads.</p>
+</section>
+<section id="expression-heads-should-not-be-classes">
+<h2>Expression heads should not be classes<a class="headerlink" href="#expression-heads-should-not-be-classes" title="Permalink to this heading">¶</a></h2>
+<p>SymPy is not the only computer algebra system or symbolic manipulation system
+to use classes for expression heads. For example <code class="docutils literal notranslate"><span class="pre">SymEngine</span></code> is a C++ library
+based on essentially the same design as SymPy but using C++ classes instead.
+The core symbolic library in SageMath is based on Pynac and is based on GiNaC
+which is a C++ library. Each of these systems follows much of the design that I
+referred to above where there are classes like <code class="docutils literal notranslate"><span class="pre">Add</span></code>, <code class="docutils literal notranslate"><span class="pre">Mul</span></code> etc having
+different methods to give different behaviour. Exactly how the methods work and
+how the internal data structures work is different in each case but the basic
+principles are the same: each different expression head is a different class
+and the meaning of the different expression heads is encoded in the fact that
+they have methods that do different things in different subclasses.</p>
+<p>There are more examples of class-based symbolic systems that I could list but
+broadly they are similar for the purposes of our discussion here. What I do
+want to say though is that these different systems have different scopes and
+are used in different ways and so the arguments that I will make for not using
+classes do not necessarily apply to them as well. The system that I know best
+is SymPy and in that context I can see that the use of classes for expression
+heads works out badly.</p>
+<p>At the same time there are other symbolic computing engines that are not based
+on the object-oriented design. For example Mathematica allows any variable to
+be either a symbol or a function and in Mathematica the internal representation
+for something like <code class="docutils literal notranslate"><span class="pre">cos(x)</span></code> (spelled <code class="docutils literal notranslate"><span class="pre">Cos[x]</span></code> in Wolfram language)is
+something more like a tuple:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">(</span><span class="n">Cos</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>where both <code class="docutils literal notranslate"><span class="pre">Cos</span></code> and <code class="docutils literal notranslate"><span class="pre">x</span></code> are both just atomic symbols. There is no basic
+distinction between what kind of objects <code class="docutils literal notranslate"><span class="pre">Cos</span></code> and <code class="docutils literal notranslate"><span class="pre">x</span></code> are here:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">In</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">:=</span> <span class="n">expr1</span> <span class="o">=</span> <span class="n">Cos</span><span class="p">[</span><span class="n">x</span><span class="p">]</span>
+<span class="n">Out</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">:=</span> <span class="n">Cos</span><span class="p">[</span><span class="n">x</span><span class="p">]</span>
+
+<span class="n">In</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">:=</span> <span class="n">expr2</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="n">Cos</span><span class="p">]</span>
+<span class="n">Out</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">:=</span> <span class="n">x</span><span class="p">[</span><span class="n">Cos</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>Indexing into the expression gives as the <code class="docutils literal notranslate"><span class="pre">args</span></code> but also the head is simply
+the first of the <code class="docutils literal notranslate"><span class="pre">args</span></code>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">In</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="o">:=</span> <span class="n">expr2</span><span class="p">[[</span><span class="mi">0</span><span class="p">]]</span>
+<span class="n">Out</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="o">:=</span> <span class="n">x</span>
+
+<span class="n">In</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span><span class="o">:=</span> <span class="n">expr2</span><span class="p">[[</span><span class="mi">1</span><span class="p">]]</span>
+<span class="n">Out</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span><span class="o">:=</span> <span class="n">Cos</span>
+</pre></div>
+</div>
+<p>Not distinguishing the head from the <code class="docutils literal notranslate"><span class="pre">args</span></code> makes it possible for the head
+itself to be a compound symbolic expression. Here we differentiate a function
+<code class="docutils literal notranslate"><span class="pre">f(x)</span></code> and we can see that the head is now an expression:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">In</span><span class="p">[</span><span class="mi">7</span><span class="p">]</span><span class="o">:=</span> <span class="n">df</span> <span class="o">=</span> <span class="n">D</span><span class="p">[</span><span class="n">f</span><span class="p">[</span><span class="n">x</span><span class="p">],</span> <span class="n">x</span><span class="p">]</span>
+<span class="n">Out</span><span class="p">[</span><span class="mi">7</span><span class="p">]</span><span class="o">:=</span> <span class="sa">f</span><span class="s1">&#39;[x]</span>
+
+<span class="n">In</span><span class="p">[</span><span class="mi">8</span><span class="p">]</span><span class="o">:=</span> <span class="n">df</span><span class="p">[[</span><span class="mi">0</span><span class="p">]]</span>
+<span class="n">Out</span><span class="p">[</span><span class="mi">8</span><span class="p">]</span><span class="o">:=</span> <span class="sa">f</span><span class="s1">&#39;</span>
+
+<span class="n">In</span><span class="p">[</span><span class="mi">9</span><span class="p">]</span><span class="o">:=</span> <span class="n">df</span><span class="p">[[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">//</span> <span class="n">FullForm</span>
+<span class="n">Out</span><span class="p">[</span><span class="mi">9</span><span class="p">]</span><span class="o">:=</span> <span class="n">Derivative</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="n">f</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>This is something that just is not directly possible in SymPy’s class-based
+system. The reason is that in SymPy a head is a class and an expression is an
+instance. The <code class="docutils literal notranslate"><span class="pre">args</span></code> of an expression also need to be instances. So now if
+<code class="docutils literal notranslate"><span class="pre">f(x)</span></code> makes sense as an expression <code class="docutils literal notranslate"><span class="pre">f</span></code> must be a class. But if <code class="docutils literal notranslate"><span class="pre">f</span></code> is a
+class then it cannot be an expression and so it cannot be in the <code class="docutils literal notranslate"><span class="pre">args</span></code> of an
+expression like <code class="docutils literal notranslate"><span class="pre">Derivative</span></code>: only its instances can. Hence in SymPy we can
+represent <code class="docutils literal notranslate"><span class="pre">f'(x)</span></code> only as <code class="docutils literal notranslate"><span class="pre">Derivative(f(x),</span> <span class="pre">x)</span></code> but there is no way to
+represent <code class="docutils literal notranslate"><span class="pre">f'</span></code> as simply the derivative of the function <code class="docutils literal notranslate"><span class="pre">f</span></code> without that
+function having been called with an argument. An operation that is natural in
+Mathematica is to differentiate an undefined function and then substitute a
+different value for its argument:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">In</span><span class="p">[</span><span class="mi">10</span><span class="p">]</span><span class="o">:=</span> <span class="n">D</span><span class="p">[</span><span class="n">f</span><span class="p">[</span><span class="n">x</span><span class="p">],</span> <span class="n">x</span><span class="p">]</span> <span class="o">/.</span> <span class="n">x</span> <span class="o">-&gt;</span> <span class="n">y</span><span class="o">^</span><span class="mi">2</span>
+<span class="n">Out</span><span class="p">[</span><span class="mi">10</span><span class="p">]</span><span class="o">:=</span> <span class="sa">f</span><span class="s1">&#39;[y ^ 2]</span>
+
+<span class="n">In</span><span class="p">[</span><span class="mi">11</span><span class="p">]</span><span class="o">:=</span> <span class="sa">f</span><span class="s1">&#39;[y^2]</span>
+<span class="n">Out</span><span class="p">[</span><span class="mi">11</span><span class="p">]</span><span class="o">:=</span> <span class="sa">f</span><span class="s1">&#39;[y ^ 2]</span>
+
+<span class="n">In</span><span class="p">[</span><span class="mi">12</span><span class="p">]</span><span class="o">:=</span> <span class="sa">f</span><span class="s1">&#39;[y^2] // FullForm</span>
+<span class="n">Out</span><span class="p">[</span><span class="mi">12</span><span class="p">]</span><span class="o">:=</span> <span class="n">Derivative</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="n">f</span><span class="p">][</span><span class="n">Power</span><span class="p">[</span><span class="n">y</span><span class="p">,</span> <span class="mi">2</span><span class="p">]]</span>
+</pre></div>
+</div>
+<p>In SymPy we just cannot represent the object <code class="docutils literal notranslate"><span class="pre">Derivative[1][f]</span></code> because it
+requires <code class="docutils literal notranslate"><span class="pre">f</span></code> to be an expression but instead <code class="docutils literal notranslate"><span class="pre">f</span></code> needs to be a head.
+Instead we have awkward workarounds using <code class="docutils literal notranslate"><span class="pre">Subs</span></code>:</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="n">Function</span><span class="p">,</span> <span class="n">symbols</span><span class="p">,</span> <span class="n">pprint</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">symbols</span><span class="p">(</span><span class="s1">&#39;x, y&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">f</span> <span class="o">=</span> <span class="n">Function</span><span class="p">(</span><span class="s1">&#39;f&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="o">.</span><span class="n">subs</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+<span class="go">Subs(Derivative(f(x), x), x, y**2)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">pprint</span><span class="p">(</span><span class="n">_</span><span class="p">)</span>  
+<span class="go">/d       \|</span>
+<span class="go">|--(f(x))||   2</span>
+<span class="go">\dx      /|x=y</span>
+</pre></div>
+</div>
+<p>There are ways that this limitation could be worked around but it is not easy
+and does not simply arise naturally. Likewise many users want to be able to
+treat an undefined function as if it was a symbolic expression and do things
+like:</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="o">.</span><span class="n">subs</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">cos</span><span class="p">)</span>
+<span class="go">cos(x)</span>
+</pre></div>
+</div>
+<p>This barely works in SymPy and in fact really should just give an error. The
+fact that it works at all is because well meaning people have put fudges into
+the codebase that really just should not be there. The <code class="docutils literal notranslate"><span class="pre">Function</span></code> class in
+fact needs to have metaclasses to be able to make things like this work which
+really just shows that the problem is that <code class="docutils literal notranslate"><span class="pre">f</span></code> should not be a class. When we
+call <code class="docutils literal notranslate"><span class="pre">f</span> <span class="pre">=</span> <span class="pre">Function('f')</span></code> above in fact what happens is that a class will be
+created dynamically behind the scenes and then <code class="docutils literal notranslate"><span class="pre">f</span></code> will be that class. The
+class itself would not behave in the way that people would expect of a symbol
+and so it needs to have a metaclass to pretend that it is like a symbolic
+expression even though it cannot be one. The problem is that <code class="docutils literal notranslate"><span class="pre">f</span></code> is a
+<em>subclass</em> of <code class="docutils literal notranslate"><span class="pre">Basic</span></code> rather than an <em>instance</em> of <code class="docutils literal notranslate"><span class="pre">Basic</span></code>.</p>
+<p>Another problem with using classes for expression heads is that the expression
+head does not necessarily represent the type of object that we have. As an
+example consider an integral of a matrix:</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="n">Matrix</span><span class="p">,</span> <span class="n">Integral</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">M</span> <span class="o">=</span> <span class="n">Matrix</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="p">[</span><span class="n">x</span><span class="p">,</span> <span class="mi">4</span><span class="p">]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">M</span>
+<span class="go">Matrix([</span>
+<span class="go">[1, 2],</span>
+<span class="go">[x, 4]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">expr</span> <span class="o">=</span> <span class="n">Integral</span><span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">expr</span><span class="p">)</span>
+<span class="go">Integral(Matrix([</span>
+<span class="go">[1, 2],</span>
+<span class="go">[x, 4]]), (x, 0, 1))</span>
+</pre></div>
+</div>
+<p>The expression tree for this expression looks like:</p>
+digraph{
+
+# Graph style
+&quot;ordering&quot;=&quot;out&quot;
+&quot;rankdir&quot;=&quot;TD&quot;
+
+#########
+# Nodes #
+#########
+
+&quot;Integral(ImmutableDenseMatrix(Integer(2), Integer(2), Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4))), Tuple(Symbol('x'), Integer(0), Integer(1)))_()&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;Integral&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;ImmutableDenseMatrix(Integer(2), Integer(2), Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4)))_(0,)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;ImmutableDenseMatrix&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Integer(2)_(0, 0)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;2&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Integer(2)_(0, 1)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;2&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4))_(0, 2)&quot; [&quot;color&quot;=&quot;blue&quot;, &quot;label&quot;=&quot;Tuple&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Integer(1)_(0, 2, 0)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;1&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Integer(2)_(0, 2, 1)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;2&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Symbol('x')_(0, 2, 2)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;x&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Integer(4)_(0, 2, 3)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;4&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Tuple(Symbol('x'), Integer(0), Integer(1))_(1,)&quot; [&quot;color&quot;=&quot;blue&quot;, &quot;label&quot;=&quot;Tuple&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Symbol('x')_(1, 0)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;x&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Integer(0)_(1, 1)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;0&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Integer(1)_(1, 2)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;1&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+
+#########
+# Edges #
+#########
+
+&quot;Integral(ImmutableDenseMatrix(Integer(2), Integer(2), Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4))), Tuple(Symbol('x'), Integer(0), Integer(1)))_()&quot; -&gt; &quot;ImmutableDenseMatrix(Integer(2), Integer(2), Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4)))_(0,)&quot;;
+&quot;Integral(ImmutableDenseMatrix(Integer(2), Integer(2), Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4))), Tuple(Symbol('x'), Integer(0), Integer(1)))_()&quot; -&gt; &quot;Tuple(Symbol('x'), Integer(0), Integer(1))_(1,)&quot;;
+&quot;ImmutableDenseMatrix(Integer(2), Integer(2), Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4)))_(0,)&quot; -&gt; &quot;Integer(2)_(0, 0)&quot;;
+&quot;ImmutableDenseMatrix(Integer(2), Integer(2), Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4)))_(0,)&quot; -&gt; &quot;Integer(2)_(0, 1)&quot;;
+&quot;ImmutableDenseMatrix(Integer(2), Integer(2), Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4)))_(0,)&quot; -&gt; &quot;Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4))_(0, 2)&quot;;
+&quot;Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4))_(0, 2)&quot; -&gt; &quot;Integer(1)_(0, 2, 0)&quot;;
+&quot;Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4))_(0, 2)&quot; -&gt; &quot;Integer(2)_(0, 2, 1)&quot;;
+&quot;Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4))_(0, 2)&quot; -&gt; &quot;Symbol('x')_(0, 2, 2)&quot;;
+&quot;Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4))_(0, 2)&quot; -&gt; &quot;Integer(4)_(0, 2, 3)&quot;;
+&quot;Tuple(Symbol('x'), Integer(0), Integer(1))_(1,)&quot; -&gt; &quot;Symbol('x')_(1, 0)&quot;;
+&quot;Tuple(Symbol('x'), Integer(0), Integer(1))_(1,)&quot; -&gt; &quot;Integer(0)_(1, 1)&quot;;
+&quot;Tuple(Symbol('x'), Integer(0), Integer(1))_(1,)&quot; -&gt; &quot;Integer(1)_(1, 2)&quot;;
+}
+<p>We see then that the head here is <code class="docutils literal notranslate"><span class="pre">Integral</span></code>. However conceptually this
+object is really a matrix. It should have the attributes and properties of a
+matrix such as <code class="docutils literal notranslate"><span class="pre">.shape</span></code>:</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">M</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">(2, 2)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">expr</span><span class="o">.</span><span class="n">shape</span>
+<span class="gt">Traceback (most recent call last):</span>
+<span class="w">  </span><span class="c">...</span>
+<span class="gr">AttributeError</span>: <span class="n">&#39;Integral&#39; object has no attribute &#39;shape&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">expr</span><span class="o">.</span><span class="n">doit</span><span class="p">()</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">(2, 2)</span>
+</pre></div>
+</div>
+<p>Many other operations involving <code class="docutils literal notranslate"><span class="pre">expr</span></code> will not work properly like
+<code class="docutils literal notranslate"><span class="pre">det(expr)</span></code>, <code class="docutils literal notranslate"><span class="pre">expr.det()</span></code>, <code class="docutils literal notranslate"><span class="pre">expr</span> <span class="pre">*</span> <span class="pre">M</span></code> and so on. This basic problem
+permeates much of SymPy. Objects are distinguished based on their Python type
+which is their expression head. However the expression head does not really
+represent the “type” of mathematical object we have or what the expression
+represents. There are ways to work around this but it shows quite clearly that
+there is a mismatch between identifying an expression head with the kind of
+object and therefore that identifying expression heads with classes muddles
+things up.</p>
+</section>
+<section id="object-oriented-symbolic-computing">
+<h2>Object-oriented symbolic computing<a class="headerlink" href="#object-oriented-symbolic-computing" title="Permalink to this heading">¶</a></h2>
+<p>Many operations in SymPy are slow. Sometimes this slowness is inevitable just
+because many symbolic algorithms are inherently slow. Most of the time though
+it would be possible for SymPy to be much faster and this is an important
+motivation for wanting to have something different from the current <code class="docutils literal notranslate"><span class="pre">Basic</span></code>
+design.</p>
+<p>One suggestion for why SymPy can be slow is that it is written in Python rather
+than say C++. This was part of the motivation for SymEngine which essentially
+translates the basic design of SymPy’s core into C++. The intention has always
+been that it might be possible to use SymEngine as a replacement for the core
+of SymPy while still using SymPy. While SymEngine is a lot faster than SymPy
+the reasons for that are more complicated than just the difference between
+Python and C++. SymEngine has a more limited scope than SymPy and has been
+better optimised for particular common operations. SymEngine also makes
+different choices for how to do things like numerical evaluation. Many of those
+different choices would also make SymPy faster without rewriting anything in
+C++. There are still problems with SymEngine’s use of classes though in
+particular if we eventually want SymEngine to be able to replace the core of
+SymPy. Here the problem is extensibility: the fact that SymEngine uses C++
+classes to define all of its behaviour means that it cannot be extended from
+Python. That means that the only way SymEngine could replace the core of SymPy
+is if pretty much <em>all</em> methods of <em>every</em> SymPy class were translated into
+C++. And then after doing that it would not be possible to extend the behaviour
+of any of those classes from within SymPy’s Python codebase and to do all of
+things that many downstream Python projects do.</p>
+<p>The principle of that SymPy could have a core written in something like C++
+does make sense because this is how most things in Python work. The idea is
+usually that Python is a nice language to work in for end users but you would
+not usually write the computationally intensive parts of a widely used codebase
+in Python itself. This is why SymPy is unusual in being a widely used
+CPU-bound pure Python library. What would be better though than the SymEngine
+approach of translating SymPy’s classes into C++ is having a system based on
+rules and pattern-matching where the engine that applies the rules can be
+implemented as efficiently as possible but the rules themselves are still
+controllable from the Python level. To make this work we would need to <em>not</em>
+use classes for expression heads and <em>not</em> encode all behaviour in methods
+defined on classes.</p>
+<p>In any case the point that I really want to make here is that the idea that
+SymPy is slow because it is written in Python is also something of a red
+herring when it comes to thinking about how to make SymPy faster. It is
+definitely possible to make something <em>much</em> faster than SymPy itself while
+still working in pure Python. The basic design of <code class="docutils literal notranslate"><span class="pre">Basic</span></code> is poorly optimised
+and in fact makes any attempt at optimisation very difficult. If SymPy had a
+better optimised design in Python then it would be much easier to speed that
+design up by rewriting some parts in another language if needed.</p>
+<p>Currently an operation in SymPy such as <code class="docutils literal notranslate"><span class="pre">solve</span></code> involves executing the
+methods of potentially hundreds of different classes and any one of those can
+choose to do some slow operation if it wants. The authors of any one class will
+have little idea of the implications that any operation can have for the
+performance of higher-level algorithms such as differentiation and integration
+etc. This is because in SymPy all of the logic that encodes the meanings of the
+different kinds of expressions is encoded as executable code in methods. It is
+not possible to call these methods without creating an instance of the class
+and even just creating an instance can be slow because of all of the code that
+executes during the constructor. This scattering of all of the important code
+through hundreds of classes means that <em>no one</em> can tell you what the big-O
+behaviour is for any significant operation that uses SymPy expressions.</p>
+<p>In principle the advantage of using classes is that you can optimise each
+individual class so that it uses the best data structure internally and then
+users of the class do not need to care about how those internals work. The
+problem with this is that then there can be only one possible choice of data
+structure for each expression head. It is not possible for example to use one
+kind of data structure for numerical evaluation and then a different kind of
+data structure for differentiation because the choice of data structure is
+encoded in the classes. What we need is a design that separates the
+specification of expression heads from the choice of data structure so that we
+can switch to different data structures for different operations.</p>
+</section>
+<section id="different-kinds-of-data-structure">
+<h2>Different kinds of data structure<a class="headerlink" href="#different-kinds-of-data-structure" title="Permalink to this heading">¶</a></h2>
+<p>If we were going to use different data structures then what would that look
+like? Here we will consider some examples to motivate the idea of using
+different data structures in different situations.</p>
+<p>One of the models that is most commonly used in symbolic computing
+systems is to replace the <em>tree</em> representation that I mentioned above with an
+expression <em>graph</em> instead. Here the basic idea is that most large expressions
+will have many repeating subexpressions. This happens because many operations
+that create large expressions do so precisely because the operation ends up
+repeating a subexpression in many places. A good example of this is the result
+of applying the chain rule in differentiation:</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="n">cos</span><span class="p">,</span> <span class="n">sin</span><span class="p">,</span> <span class="n">exp</span><span class="p">,</span> <span class="n">tan</span><span class="p">,</span> <span class="n">diff</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">e</span> <span class="o">=</span> <span class="n">x</span><span class="o">*</span><span class="n">cos</span><span class="p">(</span><span class="n">sin</span><span class="p">(</span><span class="n">exp</span><span class="p">(</span><span class="n">tan</span><span class="p">(</span><span class="n">x</span><span class="p">))))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">diff</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">x</span><span class="p">))</span>
+<span class="go">-x*(tan(x)**2 + 1)*exp(tan(x))*sin(sin(exp(tan(x))))*cos(exp(tan(x))) + cos(sin(exp(tan(x))))</span>
+</pre></div>
+</div>
+<p>Note how many times <code class="docutils literal notranslate"><span class="pre">tan(x)</span></code> appears and how many times <code class="docutils literal notranslate"><span class="pre">exp(tan(x))</span></code>
+appears and so on. Differentiating a large expression almost always results in
+many repeating expressions. As a tree this derivative expression looks like this:</p>
+digraph{
+
+# Graph style
+&quot;ordering&quot;=&quot;out&quot;
+&quot;rankdir&quot;=&quot;TD&quot;
+
+#########
+# Nodes #
+#########
+
+&quot;Add(Mul(Integer(-1), Symbol('x'), Add(Integer(1), Pow(tan(Symbol('x')), Integer(2))), cos(exp(tan(Symbol('x')))), exp(tan(Symbol('x'))), sin(sin(exp(tan(Symbol('x')))))), cos(sin(exp(tan(Symbol('x'))))))_()&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;Add&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Mul(Integer(-1), Symbol('x'), Add(Integer(1), Pow(tan(Symbol('x')), Integer(2))), cos(exp(tan(Symbol('x')))), exp(tan(Symbol('x'))), sin(sin(exp(tan(Symbol('x'))))))_(0,)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;Mul&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Integer(-1)_(0, 0)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;-1&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Symbol('x')_(0, 1)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;x&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Add(Integer(1), Pow(tan(Symbol('x')), Integer(2)))_(0, 2)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;Add&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Integer(1)_(0, 2, 0)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;1&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Pow(tan(Symbol('x')), Integer(2))_(0, 2, 1)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;Pow&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;tan(Symbol('x'))_(0, 2, 1, 0)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;tan&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Symbol('x')_(0, 2, 1, 0, 0)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;x&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Integer(2)_(0, 2, 1, 1)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;2&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;cos(exp(tan(Symbol('x'))))_(0, 3)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;cos&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;exp(tan(Symbol('x')))_(0, 3, 0)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;exp&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;tan(Symbol('x'))_(0, 3, 0, 0)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;tan&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Symbol('x')_(0, 3, 0, 0, 0)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;x&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;exp(tan(Symbol('x')))_(0, 4)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;exp&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;tan(Symbol('x'))_(0, 4, 0)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;tan&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Symbol('x')_(0, 4, 0, 0)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;x&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;sin(sin(exp(tan(Symbol('x')))))_(0, 5)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;sin&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;sin(exp(tan(Symbol('x'))))_(0, 5, 0)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;sin&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;exp(tan(Symbol('x')))_(0, 5, 0, 0)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;exp&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;tan(Symbol('x'))_(0, 5, 0, 0, 0)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;tan&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Symbol('x')_(0, 5, 0, 0, 0, 0)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;x&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;cos(sin(exp(tan(Symbol('x')))))_(1,)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;cos&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;sin(exp(tan(Symbol('x'))))_(1, 0)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;sin&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;exp(tan(Symbol('x')))_(1, 0, 0)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;exp&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;tan(Symbol('x'))_(1, 0, 0, 0)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;tan&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+&quot;Symbol('x')_(1, 0, 0, 0, 0)&quot; [&quot;color&quot;=&quot;black&quot;, &quot;label&quot;=&quot;x&quot;, &quot;shape&quot;=&quot;ellipse&quot;];
+
+#########
+# Edges #
+#########
+
+&quot;Add(Mul(Integer(-1), Symbol('x'), Add(Integer(1), Pow(tan(Symbol('x')), Integer(2))), cos(exp(tan(Symbol('x')))), exp(tan(Symbol('x'))), sin(sin(exp(tan(Symbol('x')))))), cos(sin(exp(tan(Symbol('x'))))))_()&quot; -&gt; &quot;Mul(Integer(-1), Symbol('x'), Add(Integer(1), Pow(tan(Symbol('x')), Integer(2))), cos(exp(tan(Symbol('x')))), exp(tan(Symbol('x'))), sin(sin(exp(tan(Symbol('x'))))))_(0,)&quot;;
+&quot;Add(Mul(Integer(-1), Symbol('x'), Add(Integer(1), Pow(tan(Symbol('x')), Integer(2))), cos(exp(tan(Symbol('x')))), exp(tan(Symbol('x'))), sin(sin(exp(tan(Symbol('x')))))), cos(sin(exp(tan(Symbol('x'))))))_()&quot; -&gt; &quot;cos(sin(exp(tan(Symbol('x')))))_(1,)&quot;;
+&quot;Mul(Integer(-1), Symbol('x'), Add(Integer(1), Pow(tan(Symbol('x')), Integer(2))), cos(exp(tan(Symbol('x')))), exp(tan(Symbol('x'))), sin(sin(exp(tan(Symbol('x'))))))_(0,)&quot; -&gt; &quot;Integer(-1)_(0, 0)&quot;;
+&quot;Mul(Integer(-1), Symbol('x'), Add(Integer(1), Pow(tan(Symbol('x')), Integer(2))), cos(exp(tan(Symbol('x')))), exp(tan(Symbol('x'))), sin(sin(exp(tan(Symbol('x'))))))_(0,)&quot; -&gt; &quot;Symbol('x')_(0, 1)&quot;;
+&quot;Mul(Integer(-1), Symbol('x'), Add(Integer(1), Pow(tan(Symbol('x')), Integer(2))), cos(exp(tan(Symbol('x')))), exp(tan(Symbol('x'))), sin(sin(exp(tan(Symbol('x'))))))_(0,)&quot; -&gt; &quot;Add(Integer(1), Pow(tan(Symbol('x')), Integer(2)))_(0, 2)&quot;;
+&quot;Mul(Integer(-1), Symbol('x'), Add(Integer(1), Pow(tan(Symbol('x')), Integer(2))), cos(exp(tan(Symbol('x')))), exp(tan(Symbol('x'))), sin(sin(exp(tan(Symbol('x'))))))_(0,)&quot; -&gt; &quot;cos(exp(tan(Symbol('x'))))_(0, 3)&quot;;
+&quot;Mul(Integer(-1), Symbol('x'), Add(Integer(1), Pow(tan(Symbol('x')), Integer(2))), cos(exp(tan(Symbol('x')))), exp(tan(Symbol('x'))), sin(sin(exp(tan(Symbol('x'))))))_(0,)&quot; -&gt; &quot;exp(tan(Symbol('x')))_(0, 4)&quot;;
+&quot;Mul(Integer(-1), Symbol('x'), Add(Integer(1), Pow(tan(Symbol('x')), Integer(2))), cos(exp(tan(Symbol('x')))), exp(tan(Symbol('x'))), sin(sin(exp(tan(Symbol('x'))))))_(0,)&quot; -&gt; &quot;sin(sin(exp(tan(Symbol('x')))))_(0, 5)&quot;;
+&quot;Add(Integer(1), Pow(tan(Symbol('x')), Integer(2)))_(0, 2)&quot; -&gt; &quot;Integer(1)_(0, 2, 0)&quot;;
+&quot;Add(Integer(1), Pow(tan(Symbol('x')), Integer(2)))_(0, 2)&quot; -&gt; &quot;Pow(tan(Symbol('x')), Integer(2))_(0, 2, 1)&quot;;
+&quot;Pow(tan(Symbol('x')), Integer(2))_(0, 2, 1)&quot; -&gt; &quot;tan(Symbol('x'))_(0, 2, 1, 0)&quot;;
+&quot;Pow(tan(Symbol('x')), Integer(2))_(0, 2, 1)&quot; -&gt; &quot;Integer(2)_(0, 2, 1, 1)&quot;;
+&quot;tan(Symbol('x'))_(0, 2, 1, 0)&quot; -&gt; &quot;Symbol('x')_(0, 2, 1, 0, 0)&quot;;
+&quot;cos(exp(tan(Symbol('x'))))_(0, 3)&quot; -&gt; &quot;exp(tan(Symbol('x')))_(0, 3, 0)&quot;;
+&quot;exp(tan(Symbol('x')))_(0, 3, 0)&quot; -&gt; &quot;tan(Symbol('x'))_(0, 3, 0, 0)&quot;;
+&quot;tan(Symbol('x'))_(0, 3, 0, 0)&quot; -&gt; &quot;Symbol('x')_(0, 3, 0, 0, 0)&quot;;
+&quot;exp(tan(Symbol('x')))_(0, 4)&quot; -&gt; &quot;tan(Symbol('x'))_(0, 4, 0)&quot;;
+&quot;tan(Symbol('x'))_(0, 4, 0)&quot; -&gt; &quot;Symbol('x')_(0, 4, 0, 0)&quot;;
+&quot;sin(sin(exp(tan(Symbol('x')))))_(0, 5)&quot; -&gt; &quot;sin(exp(tan(Symbol('x'))))_(0, 5, 0)&quot;;
+&quot;sin(exp(tan(Symbol('x'))))_(0, 5, 0)&quot; -&gt; &quot;exp(tan(Symbol('x')))_(0, 5, 0, 0)&quot;;
+&quot;exp(tan(Symbol('x')))_(0, 5, 0, 0)&quot; -&gt; &quot;tan(Symbol('x'))_(0, 5, 0, 0, 0)&quot;;
+&quot;tan(Symbol('x'))_(0, 5, 0, 0, 0)&quot; -&gt; &quot;Symbol('x')_(0, 5, 0, 0, 0, 0)&quot;;
+&quot;cos(sin(exp(tan(Symbol('x')))))_(1,)&quot; -&gt; &quot;sin(exp(tan(Symbol('x'))))_(1, 0)&quot;;
+&quot;sin(exp(tan(Symbol('x'))))_(1, 0)&quot; -&gt; &quot;exp(tan(Symbol('x')))_(1, 0, 0)&quot;;
+&quot;exp(tan(Symbol('x')))_(1, 0, 0)&quot; -&gt; &quot;tan(Symbol('x'))_(1, 0, 0, 0)&quot;;
+&quot;tan(Symbol('x'))_(1, 0, 0, 0)&quot; -&gt; &quot;Symbol('x')_(1, 0, 0, 0, 0)&quot;;
+}
+
+<p>The idea in representing the expression as a graph is that we never duplicate
+any repeating expression. Every place in the expression that features the same
+expression like <code class="docutils literal notranslate"><span class="pre">tan(x)</span></code> for example will just reuse the previously created
+expression. Now our expression becomes a <em>directed acyclic graph</em> (DAG) and
+looks more like this (this diagram does not capture the ordering of the args
+but it is easier for me to draw like this with graphviz):</p>
+digraph{
+
+# Graph style
+&quot;ordering&quot;=&quot;out&quot;
+&quot;rankdir&quot;=&quot;TD&quot;
+
+#########
+# Nodes #
+#########
+
+Add1 [&quot;label&quot;=&quot;Add&quot;];
+Mul1 [&quot;label&quot;=&quot;Mul&quot;];
+cos1 [&quot;label&quot;=&quot;cos&quot;];
+sin1 [&quot;label&quot;=&quot;sin&quot;];
+exp1 [&quot;label&quot;=&quot;exp&quot;];
+tan1 [&quot;label&quot;=&quot;tan&quot;];
+x [&quot;label&quot;=&quot;x&quot;];
+sin2 [&quot;label&quot;=&quot;sin&quot;];
+cos2 [&quot;label&quot;=&quot;cos&quot;];
+Add2 [&quot;label&quot;=&quot;Add&quot;];
+1 [&quot;label&quot;=&quot;1&quot;];
+2 [&quot;label&quot;=&quot;2&quot;];
+-1 [&quot;label&quot;=&quot;-1&quot;];
+Pow [&quot;label&quot;=&quot;Pow&quot;];
+
+Add1 -&gt; {Mul1, cos1}
+cos1 -&gt; sin1
+sin1 -&gt; exp1
+exp1 -&gt; tan1
+tan1 -&gt; x
+Mul1 -&gt; {-1, x, Add2, cos2, exp1, sin2}
+
+Add2 -&gt; {1, Pow}
+Pow -&gt; {tan1, 2}
+cos2 -&gt; exp1
+sin2 -&gt; sin1
+
+}
+<p>What we can see here is that this DAG has fewer nodes than the original tree
+which will obviously save on memory. In practice a lot of the time this is what
+happens in SymPy already because of the use of the cache. If an operation
+repeatedly attempts to construct some expression then the cache will just
+return new references to the already created expression e.g.</p>
+<div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">Pow</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span> <span class="ow">is</span> <span class="n">Pow</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+<span class="go">True</span>
+</pre></div>
+</div>
+<p>Here in Python the <code class="docutils literal notranslate"><span class="pre">is</span></code> operator verifies that these are the exact same
+object in memory. The problem though is that the cache is just a cache and
+cannot be relied upon. The cache will often reduce the memory usage of
+repeating subexpressions but any operation in SymPy will still need to traverse
+the expression as if it were the fully expanded tree. In SymPy if we wanted to
+substitute a value like say <code class="docutils literal notranslate"><span class="pre">x</span> <span class="pre">-&gt;</span> <span class="pre">pi</span></code> we would need to recurse down the whole
+tree like this:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">subs</span><span class="p">(</span><span class="n">expression</span><span class="p">,</span> <span class="n">old_value</span><span class="p">,</span> <span class="n">new_value</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Replace old_value with new_value in expression&quot;&quot;&quot;</span>
+    <span class="c1"># Handle substitution</span>
+    <span class="k">if</span> <span class="n">expression</span> <span class="o">==</span> <span class="n">old_value</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">new_value</span>
+
+    <span class="c1"># Base case for recursion is an atom</span>
+    <span class="n">old_args</span> <span class="o">=</span> <span class="n">expression</span><span class="o">.</span><span class="n">args</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">old_args</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">expression</span>
+
+    <span class="c1"># Call subs recursively on all args</span>
+    <span class="n">new_args</span> <span class="o">=</span> <span class="p">[</span><span class="n">subs</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">old_value</span><span class="p">,</span> <span class="n">new_value</span><span class="p">)</span> <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">old_args</span><span class="p">]</span>
+
+    <span class="c1"># Make a new expression with the new args</span>
+    <span class="k">return</span> <span class="n">expression</span><span class="o">.</span><span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">new_args</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Here the operation always needs to traverse the entire tree. Again we can use
+the cache to save some of the repeated work. It would be much better though if
+we could actually evaluate each subexpression exactly once rather than
+depending on the cache. One of the problems with depending on the cache is that
+when we get to large expressions that the cache itself gets full and suddenly
+the cost of all of the duplicated work processing subexpressions becomes
+enormous. A better approach is to switch from recursing down the tree to
+building up from the bottom. For that we want a <em>topological sort</em> of the DAG
+which we will represent using a different data structure.</p>
+</section>
+<section id="demonstration">
+<h2>Demonstration<a class="headerlink" href="#demonstration" title="Permalink to this heading">¶</a></h2>
+<p>Here now is some simple code that demonstrates all of the ideas above</p>
+</section>
 </section>
 
 
