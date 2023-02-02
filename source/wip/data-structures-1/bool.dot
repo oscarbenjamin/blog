@@ -1,0 +1,5 @@
+digraph G {
+  Boolean -> {true, false, And, Or, Relational};
+  Relational -> {Eq, Ne, Lt, Le, Gt, Ge};
+}
+

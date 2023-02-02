@@ -1,0 +1,38 @@
+digraph{
+
+# Graph style
+"ordering"="out"
+"rankdir"="TD"
+
+#########
+# Nodes #
+#########
+
+Add1 ["label"="Add"];
+Mul1 ["label"="Mul"];
+cos1 ["label"="cos"];
+sin1 ["label"="sin"];
+exp1 ["label"="exp"];
+tan1 ["label"="tan"];
+x ["label"="x"];
+sin2 ["label"="sin"];
+cos2 ["label"="cos"];
+Add2 ["label"="Add"];
+1 ["label"="1"];
+2 ["label"="2"];
+-1 ["label"="-1"];
+Pow ["label"="Pow"];
+
+Add1 -> {Mul1, cos1}
+cos1 -> sin1
+sin1 -> exp1
+exp1 -> tan1
+tan1 -> x
+Mul1 -> {-1, x, Add2, cos2, exp1, sin2}
+
+Add2 -> {1, Pow}
+Pow -> {tan1, 2}
+cos2 -> exp1
+sin2 -> sin1
+
+}

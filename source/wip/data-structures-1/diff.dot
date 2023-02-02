@@ -1,0 +1,70 @@
+digraph{
+
+# Graph style
+"ordering"="out"
+"rankdir"="TD"
+
+#########
+# Nodes #
+#########
+
+"Add(Mul(Integer(-1), Symbol('x'), Add(Integer(1), Pow(tan(Symbol('x')), Integer(2))), cos(exp(tan(Symbol('x')))), exp(tan(Symbol('x'))), sin(sin(exp(tan(Symbol('x')))))), cos(sin(exp(tan(Symbol('x'))))))_()" ["color"="black", "label"="Add", "shape"="ellipse"];
+"Mul(Integer(-1), Symbol('x'), Add(Integer(1), Pow(tan(Symbol('x')), Integer(2))), cos(exp(tan(Symbol('x')))), exp(tan(Symbol('x'))), sin(sin(exp(tan(Symbol('x'))))))_(0,)" ["color"="black", "label"="Mul", "shape"="ellipse"];
+"Integer(-1)_(0, 0)" ["color"="black", "label"="-1", "shape"="ellipse"];
+"Symbol('x')_(0, 1)" ["color"="black", "label"="x", "shape"="ellipse"];
+"Add(Integer(1), Pow(tan(Symbol('x')), Integer(2)))_(0, 2)" ["color"="black", "label"="Add", "shape"="ellipse"];
+"Integer(1)_(0, 2, 0)" ["color"="black", "label"="1", "shape"="ellipse"];
+"Pow(tan(Symbol('x')), Integer(2))_(0, 2, 1)" ["color"="black", "label"="Pow", "shape"="ellipse"];
+"tan(Symbol('x'))_(0, 2, 1, 0)" ["color"="black", "label"="tan", "shape"="ellipse"];
+"Symbol('x')_(0, 2, 1, 0, 0)" ["color"="black", "label"="x", "shape"="ellipse"];
+"Integer(2)_(0, 2, 1, 1)" ["color"="black", "label"="2", "shape"="ellipse"];
+"cos(exp(tan(Symbol('x'))))_(0, 3)" ["color"="black", "label"="cos", "shape"="ellipse"];
+"exp(tan(Symbol('x')))_(0, 3, 0)" ["color"="black", "label"="exp", "shape"="ellipse"];
+"tan(Symbol('x'))_(0, 3, 0, 0)" ["color"="black", "label"="tan", "shape"="ellipse"];
+"Symbol('x')_(0, 3, 0, 0, 0)" ["color"="black", "label"="x", "shape"="ellipse"];
+"exp(tan(Symbol('x')))_(0, 4)" ["color"="black", "label"="exp", "shape"="ellipse"];
+"tan(Symbol('x'))_(0, 4, 0)" ["color"="black", "label"="tan", "shape"="ellipse"];
+"Symbol('x')_(0, 4, 0, 0)" ["color"="black", "label"="x", "shape"="ellipse"];
+"sin(sin(exp(tan(Symbol('x')))))_(0, 5)" ["color"="black", "label"="sin", "shape"="ellipse"];
+"sin(exp(tan(Symbol('x'))))_(0, 5, 0)" ["color"="black", "label"="sin", "shape"="ellipse"];
+"exp(tan(Symbol('x')))_(0, 5, 0, 0)" ["color"="black", "label"="exp", "shape"="ellipse"];
+"tan(Symbol('x'))_(0, 5, 0, 0, 0)" ["color"="black", "label"="tan", "shape"="ellipse"];
+"Symbol('x')_(0, 5, 0, 0, 0, 0)" ["color"="black", "label"="x", "shape"="ellipse"];
+"cos(sin(exp(tan(Symbol('x')))))_(1,)" ["color"="black", "label"="cos", "shape"="ellipse"];
+"sin(exp(tan(Symbol('x'))))_(1, 0)" ["color"="black", "label"="sin", "shape"="ellipse"];
+"exp(tan(Symbol('x')))_(1, 0, 0)" ["color"="black", "label"="exp", "shape"="ellipse"];
+"tan(Symbol('x'))_(1, 0, 0, 0)" ["color"="black", "label"="tan", "shape"="ellipse"];
+"Symbol('x')_(1, 0, 0, 0, 0)" ["color"="black", "label"="x", "shape"="ellipse"];
+
+#########
+# Edges #
+#########
+
+"Add(Mul(Integer(-1), Symbol('x'), Add(Integer(1), Pow(tan(Symbol('x')), Integer(2))), cos(exp(tan(Symbol('x')))), exp(tan(Symbol('x'))), sin(sin(exp(tan(Symbol('x')))))), cos(sin(exp(tan(Symbol('x'))))))_()" -> "Mul(Integer(-1), Symbol('x'), Add(Integer(1), Pow(tan(Symbol('x')), Integer(2))), cos(exp(tan(Symbol('x')))), exp(tan(Symbol('x'))), sin(sin(exp(tan(Symbol('x'))))))_(0,)";
+"Add(Mul(Integer(-1), Symbol('x'), Add(Integer(1), Pow(tan(Symbol('x')), Integer(2))), cos(exp(tan(Symbol('x')))), exp(tan(Symbol('x'))), sin(sin(exp(tan(Symbol('x')))))), cos(sin(exp(tan(Symbol('x'))))))_()" -> "cos(sin(exp(tan(Symbol('x')))))_(1,)";
+"Mul(Integer(-1), Symbol('x'), Add(Integer(1), Pow(tan(Symbol('x')), Integer(2))), cos(exp(tan(Symbol('x')))), exp(tan(Symbol('x'))), sin(sin(exp(tan(Symbol('x'))))))_(0,)" -> "Integer(-1)_(0, 0)";
+"Mul(Integer(-1), Symbol('x'), Add(Integer(1), Pow(tan(Symbol('x')), Integer(2))), cos(exp(tan(Symbol('x')))), exp(tan(Symbol('x'))), sin(sin(exp(tan(Symbol('x'))))))_(0,)" -> "Symbol('x')_(0, 1)";
+"Mul(Integer(-1), Symbol('x'), Add(Integer(1), Pow(tan(Symbol('x')), Integer(2))), cos(exp(tan(Symbol('x')))), exp(tan(Symbol('x'))), sin(sin(exp(tan(Symbol('x'))))))_(0,)" -> "Add(Integer(1), Pow(tan(Symbol('x')), Integer(2)))_(0, 2)";
+"Mul(Integer(-1), Symbol('x'), Add(Integer(1), Pow(tan(Symbol('x')), Integer(2))), cos(exp(tan(Symbol('x')))), exp(tan(Symbol('x'))), sin(sin(exp(tan(Symbol('x'))))))_(0,)" -> "cos(exp(tan(Symbol('x'))))_(0, 3)";
+"Mul(Integer(-1), Symbol('x'), Add(Integer(1), Pow(tan(Symbol('x')), Integer(2))), cos(exp(tan(Symbol('x')))), exp(tan(Symbol('x'))), sin(sin(exp(tan(Symbol('x'))))))_(0,)" -> "exp(tan(Symbol('x')))_(0, 4)";
+"Mul(Integer(-1), Symbol('x'), Add(Integer(1), Pow(tan(Symbol('x')), Integer(2))), cos(exp(tan(Symbol('x')))), exp(tan(Symbol('x'))), sin(sin(exp(tan(Symbol('x'))))))_(0,)" -> "sin(sin(exp(tan(Symbol('x')))))_(0, 5)";
+"Add(Integer(1), Pow(tan(Symbol('x')), Integer(2)))_(0, 2)" -> "Integer(1)_(0, 2, 0)";
+"Add(Integer(1), Pow(tan(Symbol('x')), Integer(2)))_(0, 2)" -> "Pow(tan(Symbol('x')), Integer(2))_(0, 2, 1)";
+"Pow(tan(Symbol('x')), Integer(2))_(0, 2, 1)" -> "tan(Symbol('x'))_(0, 2, 1, 0)";
+"Pow(tan(Symbol('x')), Integer(2))_(0, 2, 1)" -> "Integer(2)_(0, 2, 1, 1)";
+"tan(Symbol('x'))_(0, 2, 1, 0)" -> "Symbol('x')_(0, 2, 1, 0, 0)";
+"cos(exp(tan(Symbol('x'))))_(0, 3)" -> "exp(tan(Symbol('x')))_(0, 3, 0)";
+"exp(tan(Symbol('x')))_(0, 3, 0)" -> "tan(Symbol('x'))_(0, 3, 0, 0)";
+"tan(Symbol('x'))_(0, 3, 0, 0)" -> "Symbol('x')_(0, 3, 0, 0, 0)";
+"exp(tan(Symbol('x')))_(0, 4)" -> "tan(Symbol('x'))_(0, 4, 0)";
+"tan(Symbol('x'))_(0, 4, 0)" -> "Symbol('x')_(0, 4, 0, 0)";
+"sin(sin(exp(tan(Symbol('x')))))_(0, 5)" -> "sin(exp(tan(Symbol('x'))))_(0, 5, 0)";
+"sin(exp(tan(Symbol('x'))))_(0, 5, 0)" -> "exp(tan(Symbol('x')))_(0, 5, 0, 0)";
+"exp(tan(Symbol('x')))_(0, 5, 0, 0)" -> "tan(Symbol('x'))_(0, 5, 0, 0, 0)";
+"tan(Symbol('x'))_(0, 5, 0, 0, 0)" -> "Symbol('x')_(0, 5, 0, 0, 0, 0)";
+"cos(sin(exp(tan(Symbol('x')))))_(1,)" -> "sin(exp(tan(Symbol('x'))))_(1, 0)";
+"sin(exp(tan(Symbol('x'))))_(1, 0)" -> "exp(tan(Symbol('x')))_(1, 0, 0)";
+"exp(tan(Symbol('x')))_(1, 0, 0)" -> "tan(Symbol('x'))_(1, 0, 0, 0)";
+"tan(Symbol('x'))_(1, 0, 0, 0)" -> "Symbol('x')_(1, 0, 0, 0, 0)";
+}
+

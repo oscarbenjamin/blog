@@ -1,0 +1,41 @@
+digraph{
+
+# Graph style
+"ordering"="out"
+"rankdir"="TD"
+
+#########
+# Nodes #
+#########
+
+"Integral(ImmutableDenseMatrix(Integer(2), Integer(2), Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4))), Tuple(Symbol('x'), Integer(0), Integer(1)))_()" ["color"="black", "label"="Integral", "shape"="ellipse"];
+"ImmutableDenseMatrix(Integer(2), Integer(2), Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4)))_(0,)" ["color"="black", "label"="ImmutableDenseMatrix", "shape"="ellipse"];
+"Integer(2)_(0, 0)" ["color"="black", "label"="2", "shape"="ellipse"];
+"Integer(2)_(0, 1)" ["color"="black", "label"="2", "shape"="ellipse"];
+"Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4))_(0, 2)" ["color"="blue", "label"="Tuple", "shape"="ellipse"];
+"Integer(1)_(0, 2, 0)" ["color"="black", "label"="1", "shape"="ellipse"];
+"Integer(2)_(0, 2, 1)" ["color"="black", "label"="2", "shape"="ellipse"];
+"Symbol('x')_(0, 2, 2)" ["color"="black", "label"="x", "shape"="ellipse"];
+"Integer(4)_(0, 2, 3)" ["color"="black", "label"="4", "shape"="ellipse"];
+"Tuple(Symbol('x'), Integer(0), Integer(1))_(1,)" ["color"="blue", "label"="Tuple", "shape"="ellipse"];
+"Symbol('x')_(1, 0)" ["color"="black", "label"="x", "shape"="ellipse"];
+"Integer(0)_(1, 1)" ["color"="black", "label"="0", "shape"="ellipse"];
+"Integer(1)_(1, 2)" ["color"="black", "label"="1", "shape"="ellipse"];
+
+#########
+# Edges #
+#########
+
+"Integral(ImmutableDenseMatrix(Integer(2), Integer(2), Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4))), Tuple(Symbol('x'), Integer(0), Integer(1)))_()" -> "ImmutableDenseMatrix(Integer(2), Integer(2), Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4)))_(0,)";
+"Integral(ImmutableDenseMatrix(Integer(2), Integer(2), Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4))), Tuple(Symbol('x'), Integer(0), Integer(1)))_()" -> "Tuple(Symbol('x'), Integer(0), Integer(1))_(1,)";
+"ImmutableDenseMatrix(Integer(2), Integer(2), Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4)))_(0,)" -> "Integer(2)_(0, 0)";
+"ImmutableDenseMatrix(Integer(2), Integer(2), Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4)))_(0,)" -> "Integer(2)_(0, 1)";
+"ImmutableDenseMatrix(Integer(2), Integer(2), Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4)))_(0,)" -> "Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4))_(0, 2)";
+"Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4))_(0, 2)" -> "Integer(1)_(0, 2, 0)";
+"Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4))_(0, 2)" -> "Integer(2)_(0, 2, 1)";
+"Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4))_(0, 2)" -> "Symbol('x')_(0, 2, 2)";
+"Tuple(Integer(1), Integer(2), Symbol('x'), Integer(4))_(0, 2)" -> "Integer(4)_(0, 2, 3)";
+"Tuple(Symbol('x'), Integer(0), Integer(1))_(1,)" -> "Symbol('x')_(1, 0)";
+"Tuple(Symbol('x'), Integer(0), Integer(1))_(1,)" -> "Integer(0)_(1, 1)";
+"Tuple(Symbol('x'), Integer(0), Integer(1))_(1,)" -> "Integer(1)_(1, 2)";
+}

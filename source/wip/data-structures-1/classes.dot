@@ -1,0 +1,9 @@
+digraph G {
+  Basic -> {Expr, Set, Boolean};
+  Expr -> {Add, Mul, Pow, Function, Number};
+  Function -> {cos, sin, exp, tan};
+  Number -> {Integer, Rational, Float};
+  Set -> {FiniteSet, ProductSet, Union, Intersection};
+  //Boolean -> {true, false, And, Or, Relational};
+  //Relational -> {Eq, Ne, Lt, Le, Gt, Ge};
+}
