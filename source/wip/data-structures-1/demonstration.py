@@ -53,22 +53,6 @@ class Expression:
     #
 
 
-
-
-        def add(expression):
-            for child in expression.children:
-                if child not in seen:
-                    add(child)
-            seen.add(expression)
-            expressions.append(expression)
-
-        add(self)
-
-        # Now expressions is a linear
-
-        return expressions
-
-
 class AtomType:
     """Identifier to distinguish different kinds of atoms.
 
@@ -96,7 +80,6 @@ class AtomExpression(Expression):
 
     An atomic expression has an internal value but no args.
     """
-
     def __new__(cls, atom_type, value):
         #
         # Include type(value) in the key to avoid 1 == 1.0 in all_atoms.
@@ -146,9 +129,19 @@ class TreeExpression(Expression):
     def __repr__(self):
         return f'{self.head}({", ".join(map(repr, self.args))})'
 
+    def __repr__(self):
+        return to_str(self)
+
 
 def topological_sort(expression):
+    """List of subexpressions sorted topologically.
 
+    >>> f = Function('f')
+    >>> x = Symbol('x')
+    >>> y = Symbol('y')
+    >>> topological_sort(f(f(x, y), f(f(x))))
+    [f, x, y, f(x, y), f(x), f(f(x)), f(f(x, y), f(f(x)))]
+    """
     seen = set()
     expressions = []
     stack = [(expression, list(expression.children)[::-1])]
@@ -268,9 +261,41 @@ cos = Function('cos')
 one = Integer(1)
 zero = Integer(0)
 
+class UserExpression:
+
+    def __init__(self, rep):
+        self._rep = rep
+
+    def __repr__(self):
+        return to_str(self._rep)
+
+    def __neg__(self):
+        return Mul(Integer(-1), self._rep)
+
+    def __add__(self, other):
+        return Add(self._rep, other._rep)
+
+    def __sub__(self, other):
+        return Add(self._rep, Mul(Integer(-1), other._rep))
+
+    def __mul__(self, other):
+        return Mul(self._rep, other._rep)
+
+    def __pow__(self, other):
+        return Pow(self._rep, other._rep)
+
+    def eval_f64(self, values=None):
+        if values is None:
+            values = {}
+        return eval_f64(self._rep, values)
+
+    def diff(self, symbol, ntimes=1):
+        derivative = self._rep
+        for n in range(ntimes):
+            derivative = diff(derivative, symbol)
+        return UserExpression(derivative)
 
 import math
-
 
 operators_f64 = {
     Integer: float,
@@ -281,15 +306,53 @@ operators_f64 = {
     cos: math.cos,
 }
 
+def eval_f64(expression, values=None):
+    if values is None:
+        values = {}
+    return evaluate(expression, operators_f64, values)
+
+import sympy
+
+operators_sympy = {
+    Integer: sympy.Integer,
+    Symbol: sympy.Symbol,
+    Add: sympy.Add,
+    Mul: sympy.Mul,
+    Pow: sympy.Pow,
+    sin: sympy.sin,
+    cos: sympy.cos,
+}
+
+def to_sympy(expression):
+    return evaluate(expression, operators_sympy, {})
+
+operators_to_str = {
+    Integer: str,
+    Symbol: str,
+    Add: lambda *a: f'({" + ".join(a)})',
+    Mul: lambda *a: f'({"*".join(a)})',
+    Pow: lambda b, e: f'{b}^{e}',
+    sin: lambda a: f'sin({a})',
+    cos: lambda a: f'cos({a})',
+}
+
+def to_str(expression):
+    return evaluate(expression, operators_to_str, {})
+
 derivatives = {
     (sin, 0): cos,
     (cos, 0): lambda e: -sin(e),
+    (Pow, 0): lambda b, e: Pow(b, e - 1),
 }
 
 derivatives_applied = {Add}
 
 
 def diff(expression, sym):
+    """Derivative of expression wrt sym.
+
+    Uses forward accumulation algorithm.
+    """
     stack, operations = evaluation_form(expression, {})
 
     diff_stack = [one if expr == sym else zero for expr in stack]
@@ -337,12 +400,6 @@ def diff(expression, sym):
     return diff_stack[-1]
 
 
-def eval_f64(expression, values=None):
-    if values is None:
-        values = {}
-    return evaluate(expression, operators_f64, values)
-
-
 def make_expression(n):
     e = x**Integer(2) - Integer(1)
     for _ in range(n):
@@ -354,3 +411,7 @@ def make_expression2(x, n):
     for _ in range(n):
         e = e**2 + e
     return e
+
+e = sin(sin(sin(x)))
+for _ in range(10):
+    e = diff(e, x)
