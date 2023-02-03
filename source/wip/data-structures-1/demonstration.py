@@ -287,8 +287,33 @@ def to_sympy(expression):
     return evaluate(expression, operators_sympy, {})
 
 
+operators_from_sympy = {
+    sympy.Integer: lambda e: Integer(e.p),
+    sympy.Symbol: lambda e: Symbol(e.name),
+    sympy.Add: Add,
+    sympy.Mul: Mul,
+    sympy.Pow: Mul,
+    sympy.Mul: Mul,
+    sympy.sin: sin,
+    sympy.cos: cos,
+}
+
+
+def from_sympy(expression):
+    if expression.is_Atom:
+        if isinstance(expression, sympy.Integer):
+            return Integer(expression.p)
+        elif isinstance(expression, sympy.Symbol):
+            return Symbol(expression.name)
+        else:
+            assert False
+    args = [from_sympy(arg) for arg in expression.args]
+    func = operators_from_sympy[type(expression)]
+    return func(*args)
+
+
 # ------------------------------------------------------- #
-#   to_str: Printing support				  #
+#   to_str: Printing support				              #
 # ------------------------------------------------------- #
 
 
@@ -305,6 +330,34 @@ operators_to_str = {
 
 def to_str(expression):
     return evaluate(expression, operators_to_str, {})
+
+
+# ------------------------------------------------------- #
+#   count_opts: statistics about expression size          #
+# ------------------------------------------------------- #
+
+
+op1 = lambda e: 1
+sum1 = lambda *a: 1 + sum(a)
+
+
+operators_count_ops = {
+    Integer: op1,
+    Symbol: op1,
+    Add: sum1,
+    Mul: sum1,
+    Pow: sum1,
+    sin: sum1,
+    cos: sum1,
+}
+
+
+def count_ops_tree(expression):
+    return evaluate(expression, operators_count_ops, {})
+
+
+def count_ops_graph(expression):
+    return len(topological_sort(expression))
 
 
 # ------------------------------------------------------- #
