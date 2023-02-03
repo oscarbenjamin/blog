@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections import OrderedDict
 import weakref
 
@@ -161,44 +163,6 @@ def topological_sort(expression):
     return expressions
 
 
-def tree_to_instructions(expression):
-
-    subexpressions = topological_sort(expression)
-
-    atoms = []
-    evaluation = []
-    compound = []
-
-    indices = {}
-
-    for expr in subexpressions:
-        if not expr.children:
-            atoms.append(expr)
-        else:
-            compound.append(expr)
-
-    indices = dict(zip(atoms, range(len(atoms))))
-
-    for index, expr in enumerate(compound, len(atoms)):
-        child_indices = [indices[e] for e in expr.children]
-        evaluation.append(child_indices)
-        indices[expr] = index
-
-    return atoms, evaluation
-
-
-def instructions_to_tree(atoms, evaluation):
-
-    stack = list(atoms)
-
-    for indices in evaluation:
-        args = [stack[i] for i in indices]
-        stack.append(TreeExpression(*args))
-
-    expression = stack[-1]
-    return expression
-
-
 def evaluation_form(expression, operators):
 
     subexpressions = topological_sort(expression)
@@ -232,8 +196,20 @@ def evaluation_form(expression, operators):
     return atoms, operations
 
 
-def evaluate(expression, operators, values):
+def rebuild(atoms, evaluation):
+    """Inverse of evaluation_form(expression, {})"""
+    stack = list(atoms)
 
+    for indices in evaluation:
+        args = [stack[i] for i in indices]
+        stack.append(TreeExpression(*args))
+
+    expression = stack[-1]
+    return expression
+
+
+def evaluate(expression, operators, values):
+    """Evaluate the expression"""
     stack, operations = evaluation_form(expression, operators)
 
     stack = [values.get(e, e) for e in stack]
@@ -243,6 +219,11 @@ def evaluate(expression, operators, values):
         stack.append(func(*args))
 
     return stack[-1]
+
+
+# ------------------------------------------------------- #
+#   Define some basic expression types 		          #
+# ------------------------------------------------------- #
 
 
 Integer = AtomType('Integer')
@@ -259,41 +240,14 @@ sin = Function('sin')
 cos = Function('cos')
 
 one = Integer(1)
+negone = Integer(-1)
 zero = Integer(0)
 
-class UserExpression:
 
-    def __init__(self, rep):
-        self._rep = rep
+# ------------------------------------------------------- #
+#   eval_f64: 64-bit real floating point evaluation.      #
+# ------------------------------------------------------- #
 
-    def __repr__(self):
-        return to_str(self._rep)
-
-    def __neg__(self):
-        return Mul(Integer(-1), self._rep)
-
-    def __add__(self, other):
-        return Add(self._rep, other._rep)
-
-    def __sub__(self, other):
-        return Add(self._rep, Mul(Integer(-1), other._rep))
-
-    def __mul__(self, other):
-        return Mul(self._rep, other._rep)
-
-    def __pow__(self, other):
-        return Pow(self._rep, other._rep)
-
-    def eval_f64(self, values=None):
-        if values is None:
-            values = {}
-        return eval_f64(self._rep, values)
-
-    def diff(self, symbol, ntimes=1):
-        derivative = self._rep
-        for n in range(ntimes):
-            derivative = diff(derivative, symbol)
-        return UserExpression(derivative)
 
 import math
 
@@ -311,6 +265,12 @@ def eval_f64(expression, values=None):
         values = {}
     return evaluate(expression, operators_f64, values)
 
+
+# ------------------------------------------------------- #
+#   to_sympy: Convert to SymPy expression.                #
+# ------------------------------------------------------- #
+
+
 import sympy
 
 operators_sympy = {
@@ -326,6 +286,12 @@ operators_sympy = {
 def to_sympy(expression):
     return evaluate(expression, operators_sympy, {})
 
+
+# ------------------------------------------------------- #
+#   to_str: Printing support				  #
+# ------------------------------------------------------- #
+
+
 operators_to_str = {
     Integer: str,
     Symbol: str,
@@ -336,8 +302,15 @@ operators_to_str = {
     cos: lambda a: f'cos({a})',
 }
 
+
 def to_str(expression):
     return evaluate(expression, operators_to_str, {})
+
+
+# ------------------------------------------------------- #
+#   diff: Differentiation                                 #
+# ------------------------------------------------------- #
+
 
 derivatives = {
     (sin, 0): cos,
@@ -345,10 +318,8 @@ derivatives = {
     (Pow, 0): lambda b, e: Pow(b, e - 1),
 }
 
-derivatives_applied = {Add}
 
-
-def diff(expression, sym):
+def _diff(expression, sym):
     """Derivative of expression wrt sym.
 
     Uses forward accumulation algorithm.
@@ -376,7 +347,7 @@ def diff(expression, sym):
         elif func == Pow:
             assert diff_args[1] == zero
             base, exp = args
-            diff_terms = [Mul(exp, Pow(base, exp-Integer(1)))]
+            diff_terms = [Mul(exp, Pow(base, Add(exp, negone)))]
         else:
             diff_terms = []
             for n, diff_arg in enumerate(diff_args):
@@ -400,6 +371,13 @@ def diff(expression, sym):
     return diff_stack[-1]
 
 
+def diff(expr, sym, ntimes=1):
+    deriv = expr
+    for _ in range(ntimes):
+        deriv = _diff(deriv, sym)
+    return deriv
+
+
 def make_expression(n):
     e = x**Integer(2) - Integer(1)
     for _ in range(n):
@@ -412,6 +390,6 @@ def make_expression2(x, n):
         e = e**2 + e
     return e
 
-e = sin(sin(sin(x)))
-for _ in range(10):
-    e = diff(e, x)
+#e = sin(sin(sin(x)))
+#for _ in range(10):
+#    e = diff(e, x)
