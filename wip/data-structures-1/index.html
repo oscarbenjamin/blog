@@ -233,12 +233,12 @@ heads works out badly.</p>
 <p>At the same time there are other symbolic computing engines that are not based
 on the object-oriented design. For example Mathematica allows any variable to
 be either a symbol or a function and in Mathematica the internal representation
-for something like <code class="docutils literal notranslate"><span class="pre">cos(x)</span></code> (spelled <code class="docutils literal notranslate"><span class="pre">Cos[x]</span></code> in Wolfram language)is
+for something like <code class="docutils literal notranslate"><span class="pre">cos(x)</span></code> (spelled <code class="docutils literal notranslate"><span class="pre">Cos[x]</span></code> in Wolfram language) is
 something more like a tuple:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">(</span><span class="n">Cos</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>where both <code class="docutils literal notranslate"><span class="pre">Cos</span></code> and <code class="docutils literal notranslate"><span class="pre">x</span></code> are both just atomic symbols. There is no basic
+<p>where both <code class="docutils literal notranslate"><span class="pre">Cos</span></code> and <code class="docutils literal notranslate"><span class="pre">x</span></code> are just atomic symbols. There is no basic
 distinction between what kind of objects <code class="docutils literal notranslate"><span class="pre">Cos</span></code> and <code class="docutils literal notranslate"><span class="pre">x</span></code> are here:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">In</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">:=</span> <span class="n">expr1</span> <span class="o">=</span> <span class="n">Cos</span><span class="p">[</span><span class="n">x</span><span class="p">]</span>
 <span class="n">Out</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">:=</span> <span class="n">Cos</span><span class="p">[</span><span class="n">x</span><span class="p">]</span>
@@ -247,7 +247,7 @@ distinction between what kind of objects <code class="docutils literal notransla
 <span class="n">Out</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">:=</span> <span class="n">x</span><span class="p">[</span><span class="n">Cos</span><span class="p">]</span>
 </pre></div>
 </div>
-<p>Indexing into the expression gives as the <code class="docutils literal notranslate"><span class="pre">args</span></code> but also the head is simply
+<p>Indexing into the expression gives the <code class="docutils literal notranslate"><span class="pre">args</span></code> but also the head is simply
 the first of the <code class="docutils literal notranslate"><span class="pre">args</span></code>:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">In</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="o">:=</span> <span class="n">expr2</span><span class="p">[[</span><span class="mi">0</span><span class="p">]]</span>
 <span class="n">Out</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="o">:=</span> <span class="n">x</span>
@@ -315,7 +315,7 @@ like:</p>
 <p>This barely works in SymPy and in fact really should just give an error. The
 fact that it works at all is because well meaning people have put fudges into
 the codebase that really just should not be there. The <code class="docutils literal notranslate"><span class="pre">Function</span></code> class in
-fact needs to have metaclasses to be able to make things like this work which
+fact needs to be a metaclass to be able to make things like this work which
 really just shows that the problem is that <code class="docutils literal notranslate"><span class="pre">f</span></code> should not be a class. When we
 call <code class="docutils literal notranslate"><span class="pre">f</span> <span class="pre">=</span> <span class="pre">Function('f')</span></code> above in fact what happens is that a class will be
 created dynamically behind the scenes and then <code class="docutils literal notranslate"><span class="pre">f</span></code> will be that class. The
@@ -430,7 +430,7 @@ is if pretty much <em>all</em> methods of <em>every</em> SymPy class were transl
 C++. And then after doing that it would not be possible to extend the behaviour
 of any of those classes from within SymPy’s Python codebase and to do all of
 things that many downstream Python projects do.</p>
-<p>The principle of that SymPy could have a core written in something like C++
+<p>The principle that SymPy could have a core written in something like C++
 does make sense because this is how most things in Python work. The idea is
 usually that Python is a nice language to work in for end users but you would
 not usually write the computationally intensive parts of a widely used codebase
@@ -446,7 +446,7 @@ defined on classes.</p>
 SymPy is slow because it is written in Python is also something of a red
 herring when it comes to thinking about how to make SymPy faster. It is
 definitely possible to make something <em>much</em> faster than SymPy itself while
-still working in pure Python. The basic design of <code class="docutils literal notranslate"><span class="pre">Basic</span></code> is poorly optimised
+still working in pure Python. The design of <code class="docutils literal notranslate"><span class="pre">Basic</span></code> is poorly optimised
 and in fact makes any attempt at optimisation very difficult. If SymPy had a
 better optimised design in Python then it would be much easier to speed that
 design up by rewriting some parts in another language if needed.</p>
@@ -471,7 +471,8 @@ kind of data structure for numerical evaluation and then a different kind of
 data structure for differentiation because the choice of data structure is
 encoded in the classes. What we need is a design that separates the
 specification of expression heads from the choice of data structure so that we
-can switch to different data structures for different operations.</p>
+can switch to different data structures for different operations. That means
+not using classes for expression heads.</p>
 </section>
 <section id="different-kinds-of-data-structure">
 <h2>Different kinds of data structure<a class="headerlink" href="#different-kinds-of-data-structure" title="Permalink to this heading">¶</a></h2>
@@ -483,7 +484,7 @@ systems is to replace the <em>tree</em> representation that I mentioned above wi
 expression <em>graph</em> instead. Here the basic idea is that most large expressions
 will have many repeating subexpressions. This happens because many operations
 that create large expressions do so precisely because the operation ends up
-repeating a subexpression in many places. A good example of this is the result
+repeating subexpressions in many places. A good example of this is the result
 of applying the chain rule in differentiation:</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="n">cos</span><span class="p">,</span> <span class="n">sin</span><span class="p">,</span> <span class="n">exp</span><span class="p">,</span> <span class="n">tan</span><span class="p">,</span> <span class="n">diff</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">e</span> <span class="o">=</span> <span class="n">x</span><span class="o">*</span><span class="n">cos</span><span class="p">(</span><span class="n">sin</span><span class="p">(</span><span class="n">exp</span><span class="p">(</span><span class="n">tan</span><span class="p">(</span><span class="n">x</span><span class="p">))))</span>
@@ -568,46 +569,7 @@ digraph{
 any repeating expression. Every place in the expression that features the same
 expression like <code class="docutils literal notranslate"><span class="pre">tan(x)</span></code> for example will just reuse the previously created
 expression. Now our expression becomes a <em>directed acyclic graph</em> (DAG) and
-looks more like this (this diagram does not capture the ordering of the args
-but it is easier for me to draw like this with graphviz):</p>
-digraph{
-
-# Graph style
-&quot;ordering&quot;=&quot;out&quot;
-&quot;rankdir&quot;=&quot;TD&quot;
-
-#########
-# Nodes #
-#########
-
-Add1 [&quot;label&quot;=&quot;Add&quot;];
-Mul1 [&quot;label&quot;=&quot;Mul&quot;];
-cos1 [&quot;label&quot;=&quot;cos&quot;];
-sin1 [&quot;label&quot;=&quot;sin&quot;];
-exp1 [&quot;label&quot;=&quot;exp&quot;];
-tan1 [&quot;label&quot;=&quot;tan&quot;];
-x [&quot;label&quot;=&quot;x&quot;];
-sin2 [&quot;label&quot;=&quot;sin&quot;];
-cos2 [&quot;label&quot;=&quot;cos&quot;];
-Add2 [&quot;label&quot;=&quot;Add&quot;];
-1 [&quot;label&quot;=&quot;1&quot;];
-2 [&quot;label&quot;=&quot;2&quot;];
--1 [&quot;label&quot;=&quot;-1&quot;];
-Pow [&quot;label&quot;=&quot;Pow&quot;];
-
-Add1 -&gt; {Mul1, cos1}
-cos1 -&gt; sin1
-sin1 -&gt; exp1
-exp1 -&gt; tan1
-tan1 -&gt; x
-Mul1 -&gt; {-1, x, Add2, cos2, exp1, sin2}
-
-Add2 -&gt; {1, Pow}
-Pow -&gt; {tan1, 2}
-cos2 -&gt; exp1
-sin2 -&gt; sin1
-
-}
+its representation as a data structure is more like this:</p>
 <p>What we can see here is that this DAG has fewer nodes than the original tree
 which will obviously save on memory. In practice a lot of the time this is what
 happens in SymPy already because of the use of the cache. If an operation
@@ -642,15 +604,16 @@ tree like this:</p>
     <span class="k">return</span> <span class="n">expression</span><span class="o">.</span><span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">new_args</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>Here the operation always needs to traverse the entire tree. Again we can use
-the cache to save some of the repeated work. It would be much better though if
-we could actually evaluate each subexpression exactly once rather than
-depending on the cache. One of the problems with depending on the cache is that
-when we get to large expressions that the cache itself gets full and suddenly
-the cost of all of the duplicated work processing subexpressions becomes
-enormous. A better approach is to switch from recursing down the tree to
-building up from the bottom. For that we want a <em>topological sort</em> of the DAG
-which we will represent using a different data structure.</p>
+<p>Here the operation will traverse the entire tree processing every repeating
+subexpression many times. Again we can use the cache to save some of the
+repeated work. It would be much better though if we could actually evaluate
+each subexpression exactly once rather than depending on the cache. One of the
+problems with depending on the cache is that when we get to large expressions
+that the cache itself gets full and suddenly the cost of all of the duplicated
+work processing subexpressions becomes enormous. A better approach is to switch
+from recursing down the tree to building up from the bottom. For that we want a
+<em>topological sort</em> of the DAG which we will represent using a different data
+structure.</p>
 </section>
 <section id="demonstration">
 <h2>Demonstration<a class="headerlink" href="#demonstration" title="Permalink to this heading">¶</a></h2>

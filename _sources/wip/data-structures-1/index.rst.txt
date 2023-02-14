@@ -189,12 +189,12 @@ heads works out badly.
 At the same time there are other symbolic computing engines that are not based
 on the object-oriented design. For example Mathematica allows any variable to
 be either a symbol or a function and in Mathematica the internal representation
-for something like ``cos(x)`` (spelled ``Cos[x]`` in Wolfram language)is
+for something like ``cos(x)`` (spelled ``Cos[x]`` in Wolfram language) is
 something more like a tuple::
 
     (Cos, x)
 
-where both ``Cos`` and ``x`` are both just atomic symbols. There is no basic
+where both ``Cos`` and ``x`` are just atomic symbols. There is no basic
 distinction between what kind of objects ``Cos`` and ``x`` are here::
 
     In[1]:= expr1 = Cos[x]
@@ -203,7 +203,7 @@ distinction between what kind of objects ``Cos`` and ``x`` are here::
     In[2]:= expr2 = x[Cos]
     Out[2]:= x[Cos]
 
-Indexing into the expression gives as the ``args`` but also the head is simply
+Indexing into the expression gives the ``args`` but also the head is simply
 the first of the ``args``::
 
     In[3]:= expr2[[0]]
@@ -278,7 +278,7 @@ like:
 This barely works in SymPy and in fact really should just give an error. The
 fact that it works at all is because well meaning people have put fudges into
 the codebase that really just should not be there. The ``Function`` class in
-fact needs to have metaclasses to be able to make things like this work which
+fact needs to be a metaclass to be able to make things like this work which
 really just shows that the problem is that ``f`` should not be a class. When we
 call ``f = Function('f')`` above in fact what happens is that a class will be
 created dynamically behind the scenes and then ``f`` will be that class. The
@@ -364,7 +364,7 @@ C++. And then after doing that it would not be possible to extend the behaviour
 of any of those classes from within SymPy's Python codebase and to do all of
 things that many downstream Python projects do.
 
-The principle of that SymPy could have a core written in something like C++
+The principle that SymPy could have a core written in something like C++
 does make sense because this is how most things in Python work. The idea is
 usually that Python is a nice language to work in for end users but you would
 not usually write the computationally intensive parts of a widely used codebase
@@ -381,7 +381,7 @@ In any case the point that I really want to make here is that the idea that
 SymPy is slow because it is written in Python is also something of a red
 herring when it comes to thinking about how to make SymPy faster. It is
 definitely possible to make something *much* faster than SymPy itself while
-still working in pure Python. The basic design of ``Basic`` is poorly optimised
+still working in pure Python. The design of ``Basic`` is poorly optimised
 and in fact makes any attempt at optimisation very difficult. If SymPy had a
 better optimised design in Python then it would be much easier to speed that
 design up by rewriting some parts in another language if needed.
@@ -408,7 +408,8 @@ kind of data structure for numerical evaluation and then a different kind of
 data structure for differentiation because the choice of data structure is
 encoded in the classes. What we need is a design that separates the
 specification of expression heads from the choice of data structure so that we
-can switch to different data structures for different operations.
+can switch to different data structures for different operations. That means
+not using classes for expression heads.
 
 
 Different kinds of data structure
@@ -423,7 +424,7 @@ systems is to replace the *tree* representation that I mentioned above with an
 expression *graph* instead. Here the basic idea is that most large expressions
 will have many repeating subexpressions. This happens because many operations
 that create large expressions do so precisely because the operation ends up
-repeating a subexpression in many places. A good example of this is the result
+repeating subexpressions in many places. A good example of this is the result
 of applying the chain rule in differentiation:
 
 .. doctest::
@@ -443,10 +444,9 @@ The idea in representing the expression as a graph is that we never duplicate
 any repeating expression. Every place in the expression that features the same
 expression like ``tan(x)`` for example will just reuse the previously created
 expression. Now our expression becomes a *directed acyclic graph* (DAG) and
-looks more like this (this diagram does not capture the ordering of the args
-but it is easier for me to draw like this with graphviz):
+its representation as a data structure is more like this:
 
-.. graphviz:: diff_graph.dot
+.. graphviz:: diff_graph_2.dot
 
 What we can see here is that this DAG has fewer nodes than the original tree
 which will obviously save on memory. In practice a lot of the time this is what
@@ -484,15 +484,16 @@ tree like this::
         # Make a new expression with the new args
         return expression.func(*new_args)
 
-Here the operation always needs to traverse the entire tree. Again we can use
-the cache to save some of the repeated work. It would be much better though if
-we could actually evaluate each subexpression exactly once rather than
-depending on the cache. One of the problems with depending on the cache is that
-when we get to large expressions that the cache itself gets full and suddenly
-the cost of all of the duplicated work processing subexpressions becomes
-enormous. A better approach is to switch from recursing down the tree to
-building up from the bottom. For that we want a *topological sort* of the DAG
-which we will represent using a different data structure.
+Here the operation will traverse the entire tree processing every repeating
+subexpression many times. Again we can use the cache to save some of the
+repeated work. It would be much better though if we could actually evaluate
+each subexpression exactly once rather than depending on the cache. One of the
+problems with depending on the cache is that when we get to large expressions
+that the cache itself gets full and suddenly the cost of all of the duplicated
+work processing subexpressions becomes enormous. A better approach is to switch
+from recursing down the tree to building up from the bottom. For that we want a
+*topological sort* of the DAG which we will represent using a different data
+structure.
 
 
 Demonstration
