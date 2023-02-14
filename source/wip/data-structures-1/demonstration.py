@@ -6,10 +6,10 @@ import weakref
 #
 # A WeakValueDictionary maps keys to values but will discard items as soon as
 # there are no other references to the value. We are going to use this to map
-# from a tuples of child graphs to graph objects. Then any time we try to
-# create an expression that already exists the previously created expression
-# will be returned. Note that unlike a cache this will not hold anything in
-# memory that is not still being used somewhere.
+# from tuples of child graphs to graph objects. Then any time we try to create
+# an expression that already exists the previously created expression will be
+# returned. Note that unlike a cache this will not hold anything in memory that
+# is not still being used somewhere.
 #
 all_expressions = weakref.WeakValueDictionary()
 
@@ -267,6 +267,26 @@ def eval_f64(expression, values=None):
 
 
 # ------------------------------------------------------- #
+#   eval_int: Integer evaluation.                         #
+# ------------------------------------------------------- #
+
+
+import math
+
+operators_int = {
+    Integer: int,
+    Add: lambda *a: sum(a),
+    Mul: lambda *a: math.prod(a),
+    Pow: pow,
+}
+
+def eval_int(expression, values=None):
+    if values is None:
+        values = {}
+    return evaluate(expression, operators_int, values)
+
+
+# ------------------------------------------------------- #
 #   to_sympy: Convert to SymPy expression.                #
 # ------------------------------------------------------- #
 
@@ -333,7 +353,7 @@ def to_str(expression):
 
 
 # ------------------------------------------------------- #
-#   count_opts: statistics about expression size          #
+#   count_ops: statistics about expression size           #
 # ------------------------------------------------------- #
 
 
@@ -424,11 +444,210 @@ def _diff(expression, sym):
     return diff_stack[-1]
 
 
-def diff(expr, sym, ntimes=1):
+def _diff_reverse(expr, sym):
+    """Derivative of expression wrt sym.
+
+    Uses reverse mode accumulation.
+    """
+    stack, operations = evaluation_form(expr, {})
+
+    try:
+        sym_index = stack.index(sym)
+    except ValueError:
+        return zero
+
+    # Forward pass for evaluation of the function
+    for func, indices in operations:
+        args = [stack[i] for i in indices]
+        stack.append(func(*args))
+
+    # Reverse pass to collect the derivatives
+    nterms = len(stack)
+    diff_terms = [[] for _ in range(nterms)]
+    diff_terms[-1] = [one]
+
+    for func, indices in reversed(operations):
+        args = [stack[i] for i in indices]
+        terms = diff_terms.pop()
+        if len(terms) == 1:
+            ddf = terms[0]
+        else:
+            ddf = Add(*terms)
+        if func == Add:
+            for i in indices:
+                diff_terms[i].append(ddf)
+        elif func == Mul:
+            for n, i in enumerate(indices):
+                otherargs = args[:n] + args[n+1:] + [ddf]
+                otherargs = [arg for arg in otherargs if arg != one]
+                if len(otherargs) == 0:
+                    ddfi = one
+                elif len(otherargs) == 1:
+                    ddfi = otherargs[0]
+                else:
+                    ddfi = Mul(*otherargs)
+                diff_terms[i].append(ddfi)
+        else:
+            for n, i in enumerate(indices):
+                pdiff_func = derivatives[(func, n)]
+                pdiff = pdiff_func(*args)
+                if ddf == one:
+                    ddfi = pdiff
+                else:
+                    ddfi = Mul(ddf, pdiff)
+                diff_terms[i].append(ddfi)
+
+    terms_final = diff_terms[sym_index]
+
+    if len(terms_final) == 1:
+        dfdx = terms_final[0]
+    else:
+        dfdx = Add(*terms_final)
+
+    return dfdx
+
+
+def diff(expr, sym, ntimes=1, reverse=False):
+    diff1 = _diff_reverse if reverse else _diff
+
     deriv = expr
     for _ in range(ntimes):
-        deriv = _diff(deriv, sym)
+        deriv = diff1(deriv, sym)
     return deriv
+
+
+# -------------------------------------------------
+# binexpand : replace associative operators with binary operators
+# -------------------------------------------------
+
+from functools import reduce
+
+def _binexpand(operator, args):
+    if len(args) == 0:
+        raise ValueError
+    return reduce(operator, args)
+
+operators_binexpand = {
+    Add: lambda *a: _binexpand(Add, a),
+    Mul: lambda *a: _binexpand(Mul, a),
+}
+
+def binexpand(expression):
+    return evaluate(expression, operators_binexpand, {})
+
+# -------------------------------------------------
+# lambdification with LLVM
+# ------------------------------------------------
+
+import struct
+
+def double_to_hex(f):
+    return hex(struct.unpack('<Q', struct.pack('<d', f))[0])
+
+operators_llvm = {
+    Add: Add,
+    Mul: Mul,
+    Pow: Pow,
+    cos: cos,
+    sin: sin,
+    Integer: float,
+}
+
+_llvm_header = """
+; ModuleID = "mod1"
+target triple = "unknown-unknown-unknown"
+target datalayout = ""
+
+declare double    @llvm.pow.f64(double %Val1, double %Val2)
+declare double    @llvm.sin.f64(double %Val)
+declare double    @llvm.cos.f64(double %Val)
+
+"""
+
+def to_llvm_f64(symargs, expression):
+
+    expression = binexpand(expression)
+
+    atoms, operations = evaluation_form(expression, operators_llvm)
+
+    argnames = {s: f'%"s"' for s in symargs}
+    constants = {}
+
+    identifiers = []
+    for a in atoms:
+        if a in symargs:
+            identifiers.append(argnames[a])
+        elif isinstance(a, float):
+            identifiers.append(double_to_hex(a))
+        else:
+            raise ValueError
+
+    args = ', '.join(f'double {argnames[arg]}' for arg in symargs)
+    signature = f'define double @"jit_func1"({args})'
+
+    instructions = []
+    for func, indices in operations:
+
+        n = len(instructions)
+        identifier = f'%".{n}"'
+        identifiers.append(identifier)
+        argids = [identifiers[i] for i in indices]
+
+        if func == Add:
+            instructions.append(f'{identifier} = fadd double ' + ', '.join(argids))
+        elif func == Mul:
+            instructions.append(f'{identifier} = fmul double ' + ', '.join(argids))
+        elif func == Pow:
+            instructions.append(f'{identifier} = call double @llvm.pow.f64(double {argids[0]}, double {argids[1]})')
+        elif func == sin:
+            instructions.append(f'{identifier} = call double @llvm.sin.f64(double {argids[0]})')
+        elif func == cos:
+            instructions.append(f'{identifier} = call double @llvm.cos.f64(double {argids[0]})')
+        else:
+            raise ValueError(func)
+
+    instructions.append(f'ret double {identifiers[-1]}')
+
+    function_lines = [signature, '{', *instructions, '}']
+    module_code = _llvm_header + '\n'.join(function_lines)
+    return module_code
+
+
+_exe_eng = []
+
+
+def lambdify(args, expression):
+    module_code = to_llvm_f64(args, expression)
+
+    import ctypes
+    import llvmlite.binding as llvm
+
+    llvm.initialize()
+    llvm.initialize_native_target()
+    llvm.initialize_native_asmprinter()
+
+    llmod = llvm.parse_assembly(module_code)
+
+    pmb = llvm.create_pass_manager_builder()
+    pmb.opt_level = 2
+    pass_manager = llvm.create_module_pass_manager()
+    pmb.populate(pass_manager)
+
+    pass_manager.run(llmod)
+
+    target_machine = llvm.Target.from_default_triple().create_target_machine()
+    exe_eng = llvm.create_mcjit_compiler(llmod, target_machine)
+    exe_eng.finalize_object()
+    _exe_eng.append(exe_eng)
+
+    fptr = exe_eng.get_function_address('jit_func1')
+
+    rettype = ctypes.c_double
+    argtypes = [ctypes.c_double] * len(args)
+
+    cfunc = ctypes.CFUNCTYPE(rettype, *argtypes)(fptr)
+    return cfunc
+
 
 
 def make_expression(n):
@@ -437,12 +656,28 @@ def make_expression(n):
         e = e**Integer(2) + e
     return e
 
-def make_expression2(x, n):
-    e = x**2 - 1
+def make_expression2(n, x, intfunc=int):
+    e = x**intfunc(2) - intfunc(1)
     for _ in range(n):
-        e = e**2 + e
+        e = e**intfunc(2) + e
     return e
 
+def make_expression3(n, x, intfunc=int):
+    #return Poly(range(0, n+1)[::-1], x)
+    terms = [intfunc(m)*x**intfunc(m) for m in range(1, n+1)]
+    #return sum(terms)
+    return Add(*terms)
+
 #e = sin(sin(sin(x)))
+#diff(e, x, 10)
+
+#diff(sin(x), x, 1000)
+
+#print(1)
+#e = make_expression(100)
+#print(2)
+#print(eval_f64(e, {x:0}))
+
+
 #for _ in range(10):
 #    e = diff(e, x)
