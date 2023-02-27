@@ -317,8 +317,8 @@ The expression tree for this expression looks like:
 .. graphviz:: integral.dot
 
 We see then that the head here is ``Integral``. However conceptually this
-object is really a matrix. It should have the attributes and properties of a
-matrix such as ``.shape``:
+object is really a matrix (the integral of a matrix is a matrix). It should
+have the attributes and properties of a matrix such as ``.shape``:
 
 .. doctest::
 
@@ -372,18 +372,18 @@ subclass the printers to add the handlers to print your new type of expression.
 
 Finally the big problem with using classes for expression heads is that it
 means that any downstream code that has created new types of expressions will
-have done so by subclassing ``Basic``. The superclass/subclass relationship is
-the strongest type of coupling that can exist between codebases. This means
-that preserving backwards compatibility for downstream code makes it impossible
-to make significant improvements to ``Basic`` and its methods because it is not
-possible to simply change everything in the sympy codebase. Fixing a poorly
-designed ``Basic`` method would break any downstream code that has implemented
-that method. The downstream method might no longer be called or would be called
-with different arguments causing them to fail or produce wrong results. Many
-``Basic`` methods are not that well designed but could easily be fixed while
-preserving the same end user interface if there were not downstream libraries
-that have implemented subclasses themselves e.g.
-[no_proper_way_to_recurse_evalf]_.
+have done so by subclassing ``Basic`` and overriding its methods. The
+superclass/subclass relationship is the strongest type of coupling that can
+exist between codebases. This means that preserving backwards compatibility for
+downstream code makes it impossible to make significant improvements to
+``Basic`` and its methods because it is not possible to simply change
+everything in the sympy codebase. Fixing a poorly designed ``Basic`` method
+would break any downstream code that has implemented that method. The
+downstream method might no longer be called or would be called with different
+arguments causing them to fail or produce wrong results. Many ``Basic`` methods
+are not that well designed but could easily be fixed while preserving the same
+end user interface if there were not downstream libraries that have implemented
+subclasses themselves e.g. [no_proper_way_to_recurse_evalf]_.
 
 
 Object-oriented symbolic computing
