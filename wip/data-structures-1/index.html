@@ -73,7 +73,8 @@ other parts of the expression are <code class="docutils literal notranslate"><sp
 nodes of the expression tree. Using SymPy’s <code class="docutils literal notranslate"><span class="pre">dotprint</span></code> functon and the
 graphviz program you can make a visual representation of an expression tree
 that looks like this:</p>
-digraph{
+<div class="graphviz"><object data="../../_images/graphviz-aeb4b84d6bb86624d719ebc7002a47dc9d7b907c.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph{
 
 # Graph style
 &quot;ordering&quot;=&quot;out&quot;
@@ -99,7 +100,7 @@ digraph{
 &quot;Add(Integer(1), cos(Symbol('x')))_(0,)&quot; -&gt; &quot;Integer(1)_(0, 0)&quot;;
 &quot;Add(Integer(1), cos(Symbol('x')))_(0,)&quot; -&gt; &quot;cos(Symbol('x'))_(0, 1)&quot;;
 &quot;cos(Symbol('x'))_(0, 1)&quot; -&gt; &quot;Symbol('x')_(0, 1, 0)&quot;;
-}
+}</p></object></div>
 <p>In SymPy’s terminology the expression head is known as the <code class="docutils literal notranslate"><span class="pre">func</span></code> and the
 arguments as the <code class="docutils literal notranslate"><span class="pre">args</span></code>.</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">expr</span><span class="o">.</span><span class="n">func</span>
@@ -153,7 +154,8 @@ happen we use superclasses and then have lots of different subclasses that only
 change a few of those methods. In SymPy the top-level superclass is called
 <code class="docutils literal notranslate"><span class="pre">Basic</span></code> and it has many levels of subclasses in a hierarchy. A few classes
 from the top of this hierarchy are arranged like this:</p>
-digraph G {
+<div class="graphviz"><object data="../../_images/graphviz-55fc945bcaf0dbd5a03ef12c85fc6d8f4dfa3f47.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph G {
   Basic -&gt; {Expr, Set, Boolean};
   Expr -&gt; {Add, Mul, Pow, Function, Number};
   Function -&gt; {cos, sin, exp, tan};
@@ -161,14 +163,14 @@ digraph G {
   Set -&gt; {FiniteSet, ProductSet, Union, Intersection};
   //Boolean -&gt; {true, false, And, Or, Relational};
   //Relational -&gt; {Eq, Ne, Lt, Le, Gt, Ge};
-}
+}</p></object></div>
 <p>Many of these break down further into more subclasses for example <code class="docutils literal notranslate"><span class="pre">Boolean</span></code>
 have many subclasses in another hierarchy:</p>
-digraph G {
+<div class="graphviz"><object data="../../_images/graphviz-27d8a1be4422f70d81f035a3d98738df47ccf1ec.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph G {
   Boolean -&gt; {true, false, And, Or, Relational};
   Relational -&gt; {Eq, Ne, Lt, Le, Gt, Ge};
-}
-
+}</p></object></div>
 <p>The idea here is that the top-level <code class="docutils literal notranslate"><span class="pre">Basic</span></code> type defines methods that are
 common to all symbolic expressions like <code class="docutils literal notranslate"><span class="pre">subs</span></code> for substituting values. The
 next level subclasses like <code class="docutils literal notranslate"><span class="pre">Expr</span></code>, <code class="docutils literal notranslate"><span class="pre">Boolean</span></code> and <code class="docutils literal notranslate"><span class="pre">Set</span></code> define other
@@ -340,7 +342,8 @@ example consider an integral of a matrix:</p>
 </pre></div>
 </div>
 <p>The expression tree for this expression looks like:</p>
-digraph{
+<div class="graphviz"><object data="../../_images/graphviz-0d32f681e43b5b05ac23df9977149f070653bfeb.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph{
 
 # Graph style
 &quot;ordering&quot;=&quot;out&quot;
@@ -380,7 +383,7 @@ digraph{
 &quot;Tuple(Symbol('x'), Integer(0), Integer(1))_(1,)&quot; -&gt; &quot;Symbol('x')_(1, 0)&quot;;
 &quot;Tuple(Symbol('x'), Integer(0), Integer(1))_(1,)&quot; -&gt; &quot;Integer(0)_(1, 1)&quot;;
 &quot;Tuple(Symbol('x'), Integer(0), Integer(1))_(1,)&quot; -&gt; &quot;Integer(1)_(1, 2)&quot;;
-}
+}</p></object></div>
 <p>We see then that the head here is <code class="docutils literal notranslate"><span class="pre">Integral</span></code>. However conceptually this
 object is really a matrix. It should have the attributes and properties of a
 matrix such as <code class="docutils literal notranslate"><span class="pre">.shape</span></code>:</p>
@@ -495,7 +498,8 @@ of applying the chain rule in differentiation:</p>
 <p>Note how many times <code class="docutils literal notranslate"><span class="pre">tan(x)</span></code> appears and how many times <code class="docutils literal notranslate"><span class="pre">exp(tan(x))</span></code>
 appears and so on. Differentiating a large expression almost always results in
 many repeating expressions. As a tree this derivative expression looks like this:</p>
-digraph{
+<div class="graphviz"><object data="../../_images/graphviz-bf24261d6911b57d829be3ca902fe4e2b4253002.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph{
 
 # Graph style
 &quot;ordering&quot;=&quot;out&quot;
@@ -563,13 +567,86 @@ digraph{
 &quot;sin(exp(tan(Symbol('x'))))_(1, 0)&quot; -&gt; &quot;exp(tan(Symbol('x')))_(1, 0, 0)&quot;;
 &quot;exp(tan(Symbol('x')))_(1, 0, 0)&quot; -&gt; &quot;tan(Symbol('x'))_(1, 0, 0, 0)&quot;;
 &quot;tan(Symbol('x'))_(1, 0, 0, 0)&quot; -&gt; &quot;Symbol('x')_(1, 0, 0, 0, 0)&quot;;
-}
-
+}</p></object></div>
 <p>The idea in representing the expression as a graph is that we never duplicate
 any repeating expression. Every place in the expression that features the same
 expression like <code class="docutils literal notranslate"><span class="pre">tan(x)</span></code> for example will just reuse the previously created
 expression. Now our expression becomes a <em>directed acyclic graph</em> (DAG) and
 its representation as a data structure is more like this:</p>
+<div class="graphviz"><object data="../../_images/graphviz-10a7bb89c52b4f67f7395e1acd592bc3a4c459b6.svg" type="image/svg+xml" class="graphviz">
+<p class="warning">digraph g {
+node0 [
+label = &quot;-1&quot;
+];
+node1 [
+label = &quot;x&quot;
+];
+node2 [
+label = &quot;1&quot;
+];
+node3 [
+label = &quot;&lt;head&gt; tan | &lt;f0&gt;&quot;
+shape = &quot;record&quot;
+];
+&quot;node3&quot;:f0 -&gt; &quot;node1&quot;;
+node4 [
+label = &quot;2&quot;
+];
+node5 [
+label = &quot;&lt;head&gt; Pow | &lt;f0&gt; | &lt;f1&gt;&quot;
+shape = &quot;record&quot;
+];
+&quot;node5&quot;:f0 -&gt; &quot;node3&quot;;
+&quot;node5&quot;:f1 -&gt; &quot;node4&quot;;
+node6 [
+label = &quot;&lt;head&gt; Add | &lt;f0&gt; | &lt;f1&gt;&quot;
+shape = &quot;record&quot;
+];
+&quot;node6&quot;:f0 -&gt; &quot;node2&quot;;
+&quot;node6&quot;:f1 -&gt; &quot;node5&quot;;
+node7 [
+label = &quot;&lt;head&gt; exp | &lt;f0&gt;&quot;
+shape = &quot;record&quot;
+];
+&quot;node7&quot;:f0 -&gt; &quot;node3&quot;;
+node8 [
+label = &quot;&lt;head&gt; cos | &lt;f0&gt;&quot;
+shape = &quot;record&quot;
+];
+&quot;node8&quot;:f0 -&gt; &quot;node7&quot;;
+node9 [
+label = &quot;&lt;head&gt; sin | &lt;f0&gt;&quot;
+shape = &quot;record&quot;
+];
+&quot;node9&quot;:f0 -&gt; &quot;node7&quot;;
+node10 [
+label = &quot;&lt;head&gt; sin | &lt;f0&gt;&quot;
+shape = &quot;record&quot;
+];
+&quot;node10&quot;:f0 -&gt; &quot;node9&quot;;
+node11 [
+label = &quot;&lt;head&gt; Mul | &lt;f0&gt; | &lt;f1&gt; | &lt;f2&gt; | &lt;f3&gt; | &lt;f4&gt; | &lt;f5&gt;&quot;
+shape = &quot;record&quot;
+];
+&quot;node11&quot;:f0 -&gt; &quot;node0&quot;;
+&quot;node11&quot;:f1 -&gt; &quot;node1&quot;;
+&quot;node11&quot;:f2 -&gt; &quot;node6&quot;;
+&quot;node11&quot;:f3 -&gt; &quot;node8&quot;;
+&quot;node11&quot;:f4 -&gt; &quot;node7&quot;;
+&quot;node11&quot;:f5 -&gt; &quot;node10&quot;;
+node12 [
+label = &quot;&lt;head&gt; cos | &lt;f0&gt;&quot;
+shape = &quot;record&quot;
+];
+&quot;node12&quot;:f0 -&gt; &quot;node9&quot;;
+node13 [
+label = &quot;&lt;head&gt; Add | &lt;f0&gt; | &lt;f1&gt;&quot;
+shape = &quot;record&quot;
+];
+&quot;node13&quot;:f0 -&gt; &quot;node11&quot;;
+&quot;node13&quot;:f1 -&gt; &quot;node12&quot;;
+{rank = same; node0; node1; node2; node4; }
+}</p></object></div>
 <p>What we can see here is that this DAG has fewer nodes than the original tree
 which will obviously save on memory. In practice a lot of the time this is what
 happens in SymPy already because of the use of the cache. If an operation
