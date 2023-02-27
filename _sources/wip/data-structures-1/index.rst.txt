@@ -441,7 +441,8 @@ of applying the chain rule in differentiation:
 
 Note how many times ``tan(x)`` appears and how many times ``exp(tan(x))``
 appears and so on. Differentiating a large expression almost always results in
-many repeating expressions. As a tree this derivative expression looks like this:
+many repeating subexpressions. As a tree this derivative expression looks like
+this:
 
 .. graphviz:: diff.dot
 
@@ -499,6 +500,28 @@ work processing subexpressions becomes enormous. A better approach is to switch
 from recursing down the tree to building up from the bottom. For that we want a
 *topological sort* of the DAG which we will represent using a different data
 structure.
+
+It is important to note here that most operations on SymPy expressions involve
+recursing down the tree in the way just described for ``subs``. Some examples:
+
+- ``expr.subs(x, 1)``
+- ``expr.evalf()``
+- ``str(expr)``
+- ``expr.count_ops()``
+- ``expr.diff(x)``
+- ``expr.free_symbols``
+- ``expr.find(x)``
+- ``expr.has(x)``
+- ``expr.is_polynomial(x)``
+- ``expr.match(pattern)``
+- ``expr.doit()``
+- ``expr.expand()``
+- ``expr.rewrite(sin)``
+
+There are many more operations then it would be reasonable for me to list here.
+Even something like ``hash(expr1)`` or ``expr1 == expr2`` involves recursing
+the tree which means that even looking up a precomputed result in SymPy's cache
+requires recursing the tree!
 
 
 Demonstration

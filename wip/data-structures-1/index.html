@@ -501,7 +501,8 @@ of applying the chain rule in differentiation:</p>
 </div>
 <p>Note how many times <code class="docutils literal notranslate"><span class="pre">tan(x)</span></code> appears and how many times <code class="docutils literal notranslate"><span class="pre">exp(tan(x))</span></code>
 appears and so on. Differentiating a large expression almost always results in
-many repeating expressions. As a tree this derivative expression looks like this:</p>
+many repeating subexpressions. As a tree this derivative expression looks like
+this:</p>
 <div class="graphviz"><object data="../../_images/graphviz-bf24261d6911b57d829be3ca902fe4e2b4253002.svg" type="image/svg+xml" class="graphviz">
 <p class="warning">digraph{
 
@@ -695,6 +696,27 @@ work processing subexpressions becomes enormous. A better approach is to switch
 from recursing down the tree to building up from the bottom. For that we want a
 <em>topological sort</em> of the DAG which we will represent using a different data
 structure.</p>
+<p>It is important to note here that most operations on SymPy expressions involve
+recursing down the tree in the way just described for <code class="docutils literal notranslate"><span class="pre">subs</span></code>. Some examples:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">expr.subs(x,</span> <span class="pre">1)</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">expr.evalf()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">str(expr)</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">expr.count_ops()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">expr.diff(x)</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">expr.free_symbols</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">expr.find(x)</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">expr.has(x)</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">expr.is_polynomial(x)</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">expr.match(pattern)</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">expr.doit()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">expr.expand()</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">expr.rewrite(sin)</span></code></p></li>
+</ul>
+<p>There are many more operations then it would be reasonable for me to list here.
+Even something like <code class="docutils literal notranslate"><span class="pre">hash(expr1)</span></code> or <code class="docutils literal notranslate"><span class="pre">expr1</span> <span class="pre">==</span> <span class="pre">expr2</span></code> involves recursing
+the tree which means that even looking up a precomputed result in SymPy’s cache
+requires recursing the tree!</p>
 </section>
 <section id="demonstration">
 <h2>Demonstration<a class="headerlink" href="#demonstration" title="Permalink to this heading">¶</a></h2>
