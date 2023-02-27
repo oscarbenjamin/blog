@@ -1,0 +1,73 @@
+digraph g {
+node0 [
+label = "-1"
+];
+node1 [
+label = "x"
+];
+node2 [
+label = "1"
+];
+node3 [
+label = "<head> tan | <f0>"
+shape = "record"
+];
+"node3":f0 -> "node1";
+node4 [
+label = "2"
+];
+node5 [
+label = "<head> Pow | <f0> | <f1>"
+shape = "record"
+];
+"node5":f0 -> "node3";
+"node5":f1 -> "node4";
+node6 [
+label = "<head> Add | <f0> | <f1>"
+shape = "record"
+];
+"node6":f0 -> "node2";
+"node6":f1 -> "node5";
+node7 [
+label = "<head> exp | <f0>"
+shape = "record"
+];
+"node7":f0 -> "node3";
+node8 [
+label = "<head> cos | <f0>"
+shape = "record"
+];
+"node8":f0 -> "node7";
+node9 [
+label = "<head> sin | <f0>"
+shape = "record"
+];
+"node9":f0 -> "node7";
+node10 [
+label = "<head> sin | <f0>"
+shape = "record"
+];
+"node10":f0 -> "node9";
+node11 [
+label = "<head> Mul | <f0> | <f1> | <f2> | <f3> | <f4> | <f5>"
+shape = "record"
+];
+"node11":f0 -> "node0";
+"node11":f1 -> "node1";
+"node11":f2 -> "node6";
+"node11":f3 -> "node8";
+"node11":f4 -> "node7";
+"node11":f5 -> "node10";
+node12 [
+label = "<head> cos | <f0>"
+shape = "record"
+];
+"node12":f0 -> "node9";
+node13 [
+label = "<head> Add | <f0> | <f1>"
+shape = "record"
+];
+"node13":f0 -> "node11";
+"node13":f1 -> "node12";
+{rank = same; node0; node1; node2; node4; }
+}
