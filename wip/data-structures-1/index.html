@@ -293,8 +293,10 @@ different value for its argument:</p>
 </pre></div>
 </div>
 <p>In SymPy we just cannot represent the object <code class="docutils literal notranslate"><span class="pre">Derivative[1][f]</span></code> because it
-requires <code class="docutils literal notranslate"><span class="pre">f</span></code> to be an expression but instead <code class="docutils literal notranslate"><span class="pre">f</span></code> needs to be a head.
-Instead we have awkward workarounds using <code class="docutils literal notranslate"><span class="pre">Subs</span></code>:</p>
+requires <code class="docutils literal notranslate"><span class="pre">f</span></code> to be an expression but if <code class="docutils literal notranslate"><span class="pre">f(x)</span></code> is an expression then <code class="docutils literal notranslate"><span class="pre">f</span></code>
+is a head. The fact that heads are classes and expressions are instances means
+that a head cannot be an expression. Instead we have awkward workarounds using
+things like <code class="docutils literal notranslate"><span class="pre">Subs</span></code>:</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="n">Function</span><span class="p">,</span> <span class="n">symbols</span><span class="p">,</span> <span class="n">pprint</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">symbols</span><span class="p">(</span><span class="s1">&#39;x, y&#39;</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">f</span> <span class="o">=</span> <span class="n">Function</span><span class="p">(</span><span class="s1">&#39;f&#39;</span><span class="p">)</span>
@@ -324,7 +326,11 @@ created dynamically behind the scenes and then <code class="docutils literal not
 class itself would not behave in the way that people would expect of a symbol
 and so it needs to have a metaclass to pretend that it is like a symbolic
 expression even though it cannot be one. The problem is that <code class="docutils literal notranslate"><span class="pre">f</span></code> is a
-<em>subclass</em> of <code class="docutils literal notranslate"><span class="pre">Basic</span></code> rather than an <em>instance</em> of <code class="docutils literal notranslate"><span class="pre">Basic</span></code>. To make <code class="docutils literal notranslate"><span class="pre">f</span></code> seem like an expression (even though it is not) <code class="docutils literal notranslate"><span class="pre">Function</span></code> has to be a metaclass but that leads to other problems. There is a long-standing SymPy issue about fixing it so that functions are actually expressions in their own right <a class="reference internal" href="#sympy-issue-functions-objects" id="id1"><span>[sympy_issue_functions_objects]</span></a>.</p>
+<em>subclass</em> of <code class="docutils literal notranslate"><span class="pre">Basic</span></code> rather than an <em>instance</em> of <code class="docutils literal notranslate"><span class="pre">Basic</span></code>. To make <code class="docutils literal notranslate"><span class="pre">f</span></code>
+seem like an expression (even though it is not) <code class="docutils literal notranslate"><span class="pre">Function</span></code> has to be a
+<em>metaclass</em> but that leads to other problems. There is a long-standing SymPy
+issue about fixing it so that functions are actually expressions in their own
+right <a class="reference internal" href="#sympy-issue-functions-objects" id="id1"><span>[sympy_issue_functions_objects]</span></a>.</p>
 <p>Another problem with using classes for expression heads is that the expression
 head does not necessarily represent the type of object that we have. As an
 example consider an integral of a matrix:</p>
@@ -385,8 +391,8 @@ example consider an integral of a matrix:</p>
 &quot;Tuple(Symbol('x'), Integer(0), Integer(1))_(1,)&quot; -&gt; &quot;Integer(1)_(1, 2)&quot;;
 }</p></object></div>
 <p>We see then that the head here is <code class="docutils literal notranslate"><span class="pre">Integral</span></code>. However conceptually this
-object is really a matrix. It should have the attributes and properties of a
-matrix such as <code class="docutils literal notranslate"><span class="pre">.shape</span></code>:</p>
+object is really a matrix (the integral of a matrix is a matrix). It should
+have the attributes and properties of a matrix such as <code class="docutils literal notranslate"><span class="pre">.shape</span></code>:</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">M</span><span class="o">.</span><span class="n">shape</span>
 <span class="go">(2, 2)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">expr</span><span class="o">.</span><span class="n">shape</span>
@@ -410,6 +416,43 @@ represents. There are ways to work around this but it shows quite clearly that
 there is a mismatch between identifying an expression head with the kind of
 object and therefore that identifying expression heads with classes muddles
 things up.</p>
+<p>There are many more problems with the <code class="docutils literal notranslate"><span class="pre">Basic</span></code> design but I will just list a
+few more in the remaining paragraphs of this section. Firstly the <code class="docutils literal notranslate"><span class="pre">Basic</span></code>
+design is a constant source of bugs. The design works reasonably well if
+contributors stick to its rules and do not try to mess with it in subclasses.
+The “rules” are not really documented anywhere though and actually many
+experienced contributors do not even know what they are. I do not think I have
+seen any new contributor understand how to implement a subclass without getting
+significant things wrong and without trying to mess with some of the methods
+that should not be messed with. The problem is that classes are code and you
+can do anything you want in that code. I am not sure that anyone has a good
+enough understanding of all of the methods of <code class="docutils literal notranslate"><span class="pre">Basic</span></code> to actually implement
+them correctly for a new subclass. Many of the methods need to be implemented
+quite carefully and many are not implemented correctly already (the codebase is
+full of examples of what <em>not</em> to do!).</p>
+<p>Attaching all of the code to the classes means that the combined code for an
+important operation like “differentiation” is distributed all over the codebase
+in different classes and modules and many different methods. In some cases
+these problems have been realised such as the printing code where instead all
+of the printing code was removed from all of the classes and centralised in one
+place. The problem then is that the printing code itself is not easily
+extensible to add new types of expression which means that now to add a new
+expression you need to subclass <code class="docutils literal notranslate"><span class="pre">Basic</span></code> to add the new expression and then
+subclass the printers to add the handlers to print your new type of expression.</p>
+<p>Finally the big problem with using classes for expression heads is that it
+means that any downstream code that has created new types of expressions will
+have done so by subclassing <code class="docutils literal notranslate"><span class="pre">Basic</span></code> and overriding its methods. The
+superclass/subclass relationship is the strongest type of coupling that can
+exist between codebases. This means that preserving backwards compatibility for
+downstream code makes it impossible to make significant improvements to
+<code class="docutils literal notranslate"><span class="pre">Basic</span></code> and its methods because it is not possible to simply change
+everything in the sympy codebase. Fixing a poorly designed <code class="docutils literal notranslate"><span class="pre">Basic</span></code> method
+would break any downstream code that has implemented that method. The
+downstream method might no longer be called or would be called with different
+arguments causing them to fail or produce wrong results. Many <code class="docutils literal notranslate"><span class="pre">Basic</span></code> methods
+are not that well designed but could easily be fixed while preserving the same
+end user interface if there were not downstream libraries that have implemented
+subclasses themselves e.g. <a class="reference internal" href="#no-proper-way-to-recurse-evalf" id="id2"><span>[no_proper_way_to_recurse_evalf]</span></a>.</p>
 </section>
 <section id="object-oriented-symbolic-computing">
 <h2>Object-oriented symbolic computing<a class="headerlink" href="#object-oriented-symbolic-computing" title="Permalink to this heading">¶</a></h2>
@@ -435,7 +478,7 @@ classes to define all of its behaviour means that it cannot be extended from
 Python. That means that the only way SymEngine could replace the core of SymPy
 is if pretty much <em>all</em> methods of <em>every</em> SymPy class were translated into
 C++. And then after doing that it would not be possible to extend the behaviour
-of any of those classes from within SymPy’s Python codebase and to do all of
+of any of those classes from within SymPy’s Python codebase or to do all of
 things that many downstream Python projects do.</p>
 <p>The principle that SymPy could have a core written in something like C++
 does make sense because this is how most things in Python work. The idea is
@@ -478,8 +521,8 @@ kind of data structure for numerical evaluation and then a different kind of
 data structure for differentiation because the choice of data structure is
 encoded in the classes. What we need is a design that separates the
 specification of expression heads from the choice of data structure so that we
-can switch to different data structures for different operations. That means
-<em>not</em> using classes for expression heads.</p>
+can switch to different data structures for different operations. Again that
+means <em>not</em> using classes for expression heads.</p>
 </section>
 <section id="different-kinds-of-data-structure">
 <h2>Different kinds of data structure<a class="headerlink" href="#different-kinds-of-data-structure" title="Permalink to this heading">¶</a></h2>
@@ -728,6 +771,10 @@ requires recursing the tree!</p>
 <div class="citation" id="sympy-issue-functions-objects" role="doc-biblioentry">
 <span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id1">sympy_issue_functions_objects</a><span class="fn-bracket">]</span></span>
 <p><a class="reference external" href="https://github.com/sympy/sympy/issues/4787">https://github.com/sympy/sympy/issues/4787</a></p>
+</div>
+<div class="citation" id="no-proper-way-to-recurse-evalf" role="doc-biblioentry">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id2">no_proper_way_to_recurse_evalf</a><span class="fn-bracket">]</span></span>
+<p><a class="reference external" href="https://github.com/sympy/sympy/issues/20479">https://github.com/sympy/sympy/issues/20479</a></p>
 </div>
 </div>
 </section>
