@@ -55,7 +55,7 @@ symbols and then calling symbolic functions on those symbols</p>
 </div>
 <p>Here we have created a symbolic expression <code class="docutils literal notranslate"><span class="pre">expr</span></code> which represents the
 mathematical expression <span class="math notranslate nohighlight">\((1 + \cos{x})^2\)</span>. The expression as a data
-structure is represented as a tree where each node in the tree is particular
+structure is represented as a tree where each node in the tree is a particular
 function and the children are the <em>arguments</em> of that function. We can see this
 functional representation explicitly using SymPy’s <code class="docutils literal notranslate"><span class="pre">srepr</span></code> function</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="n">srepr</span>
@@ -114,7 +114,7 @@ this expression represents <code class="docutils literal notranslate"><span clas
 1)^2\)</span>.  Of course in turn the expression <code class="docutils literal notranslate"><span class="pre">cos(x)</span> <span class="pre">+</span> <span class="pre">1</span></code> is represented as an
 <code class="docutils literal notranslate"><span class="pre">Add</span></code> with its <code class="docutils literal notranslate"><span class="pre">args</span></code> and so on until we reach the atoms which are the
 expressions that do not have <code class="docutils literal notranslate"><span class="pre">args</span></code>. It might look like <code class="docutils literal notranslate"><span class="pre">Integer(2)</span></code> has
-the argument <code class="docutils literal notranslate"><span class="pre">1</span></code> but this is not considered to be part of the <code class="docutils literal notranslate"><span class="pre">args</span></code>:</p>
+the argument <code class="docutils literal notranslate"><span class="pre">2</span></code> but this is not considered to be part of the <code class="docutils literal notranslate"><span class="pre">args</span></code>:</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="n">Integer</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">Integer</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">func</span>
 <span class="go">&lt;class &#39;sympy.core.numbers.Integer&#39;&gt;</span>
@@ -145,7 +145,7 @@ them back through the <code class="docutils literal notranslate"><span class="pr
 heads we can make new classes. Many operations should behave differently for
 different expression heads and with classes we can add <em>methods</em> which are
 functions whose behavour can be different for each different class. This allows
-u to encode the differences between all of the different mathematical functions
+us to encode the differences between all of the different mathematical functions
 and operations when operating on symbolic expressions. Of course we want
 expressions to have a relatively uniform interface for end users so we want all
 of these different classes to present mostly the same attributes and methods
@@ -165,7 +165,7 @@ from the top of this hierarchy are arranged like this:</p>
   //Relational -&gt; {Eq, Ne, Lt, Le, Gt, Ge};
 }</p></object></div>
 <p>Many of these break down further into more subclasses for example <code class="docutils literal notranslate"><span class="pre">Boolean</span></code>
-have many subclasses in another hierarchy:</p>
+has many subclasses in another hierarchy:</p>
 <div class="graphviz"><object data="../../_images/graphviz-27d8a1be4422f70d81f035a3d98738df47ccf1ec.svg" type="image/svg+xml" class="graphviz">
 <p class="warning">digraph G {
   Boolean -&gt; {true, false, And, Or, Relational};
@@ -188,8 +188,8 @@ defines methods like <code class="docutils literal notranslate"><span class="pre
 </ul>
 <p>Then each of these high-level <code class="docutils literal notranslate"><span class="pre">Basic</span></code> subclasses will have more subclasses
 that define more specific behaviour. For example <code class="docutils literal notranslate"><span class="pre">Gt</span></code> is for greater-than and
-<code class="docutils literal notranslate"><span class="pre">Gt(x,</span> <span class="pre">y)</span></code> represents the boolean statement <span class="math notranslate nohighlight">\(x &gt; y\)</span>. The <cite>Gt</cite> class has
-methods that can work out if the statement is true and can then evaluate to
+<code class="docutils literal notranslate"><span class="pre">Gt(x,</span> <span class="pre">y)</span></code> represents the boolean statement <span class="math notranslate nohighlight">\(x &gt; y\)</span>. The <code class="docutils literal notranslate"><span class="pre">Gt</span></code> class
+has methods that can work out if the statement is true and can then evaluate to
 <code class="docutils literal notranslate"><span class="pre">true</span></code> or <code class="docutils literal notranslate"><span class="pre">false</span></code>:</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="n">Gt</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">Gt</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
@@ -324,7 +324,7 @@ created dynamically behind the scenes and then <code class="docutils literal not
 class itself would not behave in the way that people would expect of a symbol
 and so it needs to have a metaclass to pretend that it is like a symbolic
 expression even though it cannot be one. The problem is that <code class="docutils literal notranslate"><span class="pre">f</span></code> is a
-<em>subclass</em> of <code class="docutils literal notranslate"><span class="pre">Basic</span></code> rather than an <em>instance</em> of <code class="docutils literal notranslate"><span class="pre">Basic</span></code>.</p>
+<em>subclass</em> of <code class="docutils literal notranslate"><span class="pre">Basic</span></code> rather than an <em>instance</em> of <code class="docutils literal notranslate"><span class="pre">Basic</span></code>. To make <code class="docutils literal notranslate"><span class="pre">f</span></code> seem like an expression (even though it is not) <code class="docutils literal notranslate"><span class="pre">Function</span></code> has to be a metaclass but that leads to other problems. There is a long-standing SymPy issue about fixing it so that functions are actually expressions in their own right <a class="reference internal" href="#sympy-issue-functions-objects" id="id1"><span>[sympy_issue_functions_objects]</span></a>.</p>
 <p>Another problem with using classes for expression heads is that the expression
 head does not necessarily represent the type of object that we have. As an
 example consider an integral of a matrix:</p>
@@ -393,6 +393,10 @@ matrix such as <code class="docutils literal notranslate"><span class="pre">.sha
 <span class="gt">Traceback (most recent call last):</span>
 <span class="w">  </span><span class="c">...</span>
 <span class="gr">AttributeError</span>: <span class="n">&#39;Integral&#39; object has no attribute &#39;shape&#39;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">expr</span><span class="o">.</span><span class="n">doit</span><span class="p">()</span>
+<span class="go">Matrix([</span>
+<span class="go">[  1, 2],</span>
+<span class="go">[1/2, 4]])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">expr</span><span class="o">.</span><span class="n">doit</span><span class="p">()</span><span class="o">.</span><span class="n">shape</span>
 <span class="go">(2, 2)</span>
 </pre></div>
@@ -435,7 +439,7 @@ of any of those classes from within SymPy’s Python codebase and to do all of
 things that many downstream Python projects do.</p>
 <p>The principle that SymPy could have a core written in something like C++
 does make sense because this is how most things in Python work. The idea is
-usually that Python is a nice language to work in for end users but you would
+usually that Python is a nice language to work in for “end users” but you would
 not usually write the computationally intensive parts of a widely used codebase
 in Python itself. This is why SymPy is unusual in being a widely used
 CPU-bound pure Python library. What would be better though than the SymEngine
@@ -475,7 +479,7 @@ data structure for differentiation because the choice of data structure is
 encoded in the classes. What we need is a design that separates the
 specification of expression heads from the choice of data structure so that we
 can switch to different data structures for different operations. That means
-not using classes for expression heads.</p>
+<em>not</em> using classes for expression heads.</p>
 </section>
 <section id="different-kinds-of-data-structure">
 <h2>Different kinds of data structure<a class="headerlink" href="#different-kinds-of-data-structure" title="Permalink to this heading">¶</a></h2>
@@ -686,7 +690,7 @@ subexpression many times. Again we can use the cache to save some of the
 repeated work. It would be much better though if we could actually evaluate
 each subexpression exactly once rather than depending on the cache. One of the
 problems with depending on the cache is that when we get to large expressions
-that the cache itself gets full and suddenly the cost of all of the duplicated
+then the cache itself gets full and suddenly the cost of all of the duplicated
 work processing subexpressions becomes enormous. A better approach is to switch
 from recursing down the tree to building up from the bottom. For that we want a
 <em>topological sort</em> of the DAG which we will represent using a different data
@@ -695,6 +699,15 @@ structure.</p>
 <section id="demonstration">
 <h2>Demonstration<a class="headerlink" href="#demonstration" title="Permalink to this heading">¶</a></h2>
 <p>Here now is some simple code that demonstrates all of the ideas above</p>
+</section>
+<section id="references">
+<h2>References<a class="headerlink" href="#references" title="Permalink to this heading">¶</a></h2>
+<div role="list" class="citation-list">
+<div class="citation" id="sympy-issue-functions-objects" role="doc-biblioentry">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id1">sympy_issue_functions_objects</a><span class="fn-bracket">]</span></span>
+<p><a class="reference external" href="https://github.com/sympy/sympy/issues/4787">https://github.com/sympy/sympy/issues/4787</a></p>
+</div>
+</div>
 </section>
 </section>
 

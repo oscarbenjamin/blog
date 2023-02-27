@@ -25,9 +25,10 @@ symbols and then calling symbolic functions on those symbols
     >>> expr
     (cos(x) + 1)**2
 
+
 Here we have created a symbolic expression ``expr`` which represents the
 mathematical expression :math:`(1 + \cos{x})^2`. The expression as a data
-structure is represented as a tree where each node in the tree is particular
+structure is represented as a tree where each node in the tree is a particular
 function and the children are the *arguments* of that function. We can see this
 functional representation explicitly using SymPy's ``srepr`` function
 
@@ -65,7 +66,7 @@ this expression represents ``Pow(cos(x) + 1, 2)`` which is :math:`(\cos{x} +
 1)^2`.  Of course in turn the expression ``cos(x) + 1`` is represented as an
 ``Add`` with its ``args`` and so on until we reach the atoms which are the
 expressions that do not have ``args``. It might look like ``Integer(2)`` has
-the argument ``1`` but this is not considered to be part of the ``args``:
+the argument ``2`` but this is not considered to be part of the ``args``:
 
 .. doctest::
 
@@ -101,7 +102,7 @@ them back through the ``args`` attribute. If we want to make new expression
 heads we can make new classes. Many operations should behave differently for
 different expression heads and with classes we can add *methods* which are
 functions whose behavour can be different for each different class. This allows
-u to encode the differences between all of the different mathematical functions
+us to encode the differences between all of the different mathematical functions
 and operations when operating on symbolic expressions. Of course we want
 expressions to have a relatively uniform interface for end users so we want all
 of these different classes to present mostly the same attributes and methods
@@ -114,7 +115,7 @@ from the top of this hierarchy are arranged like this:
 .. graphviz:: classes.dot
 
 Many of these break down further into more subclasses for example ``Boolean``
-have many subclasses in another hierarchy:
+has many subclasses in another hierarchy:
 
 .. graphviz:: bool.dot
 
@@ -135,8 +136,8 @@ represent. For example:
 
 Then each of these high-level ``Basic`` subclasses will have more subclasses
 that define more specific behaviour. For example ``Gt`` is for greater-than and
-``Gt(x, y)`` represents the boolean statement :math:`x > y`. The `Gt` class has
-methods that can work out if the statement is true and can then evaluate to
+``Gt(x, y)`` represents the boolean statement :math:`x > y`. The ``Gt`` class
+has methods that can work out if the statement is true and can then evaluate to
 ``true`` or ``false``:
 
 .. doctest::
@@ -285,7 +286,7 @@ created dynamically behind the scenes and then ``f`` will be that class. The
 class itself would not behave in the way that people would expect of a symbol
 and so it needs to have a metaclass to pretend that it is like a symbolic
 expression even though it cannot be one. The problem is that ``f`` is a
-*subclass* of ``Basic`` rather than an *instance* of ``Basic``.
+*subclass* of ``Basic`` rather than an *instance* of ``Basic``. To make ``f`` seem like an expression (even though it is not) ``Function`` has to be a metaclass but that leads to other problems. There is a long-standing SymPy issue about fixing it so that functions are actually expressions in their own right [sympy_issue_functions_objects]_.
 
 Another problem with using classes for expression heads is that the expression
 head does not necessarily represent the type of object that we have. As an
@@ -321,6 +322,10 @@ matrix such as ``.shape``:
     Traceback (most recent call last):
       ...
     AttributeError: 'Integral' object has no attribute 'shape'
+    >>> expr.doit()
+    Matrix([
+    [  1, 2],
+    [1/2, 4]])
     >>> expr.doit().shape
     (2, 2)
 
@@ -366,7 +371,7 @@ things that many downstream Python projects do.
 
 The principle that SymPy could have a core written in something like C++
 does make sense because this is how most things in Python work. The idea is
-usually that Python is a nice language to work in for end users but you would
+usually that Python is a nice language to work in for "end users" but you would
 not usually write the computationally intensive parts of a widely used codebase
 in Python itself. This is why SymPy is unusual in being a widely used
 CPU-bound pure Python library. What would be better though than the SymEngine
@@ -409,7 +414,7 @@ data structure for differentiation because the choice of data structure is
 encoded in the classes. What we need is a design that separates the
 specification of expression heads from the choice of data structure so that we
 can switch to different data structures for different operations. That means
-not using classes for expression heads.
+*not* using classes for expression heads.
 
 
 Different kinds of data structure
@@ -489,7 +494,7 @@ subexpression many times. Again we can use the cache to save some of the
 repeated work. It would be much better though if we could actually evaluate
 each subexpression exactly once rather than depending on the cache. One of the
 problems with depending on the cache is that when we get to large expressions
-that the cache itself gets full and suddenly the cost of all of the duplicated
+then the cache itself gets full and suddenly the cost of all of the duplicated
 work processing subexpressions becomes enormous. A better approach is to switch
 from recursing down the tree to building up from the bottom. For that we want a
 *topological sort* of the DAG which we will represent using a different data
@@ -500,3 +505,8 @@ Demonstration
 -------------
 
 Here now is some simple code that demonstrates all of the ideas above
+
+References
+----------
+
+.. [sympy_issue_functions_objects] https://github.com/sympy/sympy/issues/4787
