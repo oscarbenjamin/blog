@@ -564,7 +564,7 @@ recursing down the tree in the way just described for ``subs``. Some examples:
 - ``expr.expand()``
 - ``expr.rewrite(sin)``
 
-There are many more operations then it would be reasonable for me to list here.
+There are many more operations than it would be reasonable for me to list here.
 Even something like ``hash(expr1)`` or ``expr1 == expr2`` involves recursing
 the tree which means that even looking up a precomputed result in SymPy's cache
 requires recursing the tree!
