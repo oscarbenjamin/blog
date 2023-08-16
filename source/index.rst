@@ -11,11 +11,3 @@ Welcome to Oscar Benjamin's blog
    :caption: Contents:
 
    czi/index.rst
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
