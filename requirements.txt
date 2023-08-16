@@ -1,0 +1,4 @@
+sphinx
+sympy
+ipython
+symengine
