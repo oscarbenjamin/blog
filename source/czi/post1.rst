@@ -1,5 +1,5 @@
-Towards a new SymPy: part 1
-===========================
+Towards a new SymPy: part 1 - Outline
+=====================================
 
 This is the first part of a series of posts on big changes for SymPy with
 particular focus on speed. What I am going to describe in these posts are:
@@ -341,6 +341,8 @@ The problems manifest both in terms of:
   (including just fixing obvious bugs) is difficult because the effects of any
   change are far reaching and unpredictable.
 
+.. _symengine:
+
 What about SymEngine?
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -626,7 +628,7 @@ top-level modules (this includes tests, comments, docstrings etc)::
     strategies         1406
     multipledispatch   1239
 
-The other things listed as "topics" along side ``polys`` are ``geometry``,
+The other things listed as "topics" alongside ``polys`` are ``geometry``,
 ``holonomic``, ``liealgebras``, ``categories``, ``crypto``, ``diffgeom``,
 ``plotting``, and ``stats``. Some of these are barely used by anyone while
 others like ``plotting`` are widely used and should also not be listed here.
