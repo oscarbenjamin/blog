@@ -566,11 +566,10 @@ that would be fine but in other situations it could lead to bugs. Therefore
 ``construct_domain`` refuses to create the ring ``ZZ[sin(t),cos(t)]`` to avoid
 bugs. This refusal leads to the ``EX`` domain being used which is much slower
 and also potentially subject to precisely the same bugs. The advantage of using
-the ``EX`` domain here is mainly just that other code can at least be aware
-that the domain is not well defined and can then handle things more
-conservatively.
+the ``EX`` domain here is mainly that other code can at least be aware that the
+domain is not well defined.
 
-It is perfectly possible to implement a domain that can represent a ring/field
+It is perfectly possible to implement a domain that can represent a ring
 involving both ``sin(t)`` and ``cos(t)``. There are already some kinds of
 domains that can do this although they are not used by default and also are not
 quite right for what is needed. What we really want is to be able to make a 
