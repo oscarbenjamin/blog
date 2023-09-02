@@ -1377,3 +1377,21 @@ and could be done quite soon. Others are bigger more long-term projects. For me
 the top ticket is adding FLINT's sparse polynomials to python-flint and then
 having SymPy use them for the domains which I don't think would be particularly
 difficult.
+=======
+Neither of these changes is especially hard to make but in either case the
+impact of making such a change can be far reaching and hard to predict in full.
+Each time some calculation is switched from the ``EX`` domain to a more
+structured domain the main effect is to make things (much) faster, and a
+secondary effect is that it potentially reduces bugs. The third effect is that
+it leads to the output of the calculation being in a "more canonical" form
+which is a good thing but it is a change in output in some sense and it is the
+impact of this change that is hard to predict.
+
+Speeding up the domains
+-----------------------
+
+I talked a lot above about the speed of ``ZZ`` and ``QQ`` when using gmpy2 or
+otherwise. The other domains are all implemented in SymPy's ``sympy.polys``
+module in pure Python code. Mostly the algorithms used are reasonable and the
+code is well micro-optimised but the limitation is just that it is not possible
+to make things faster while working in pure Python.
