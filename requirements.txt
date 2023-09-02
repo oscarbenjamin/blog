@@ -3,3 +3,5 @@ sphinx-autobuild
 sympy
 ipython
 symengine
+gmpy2
+matplotlib

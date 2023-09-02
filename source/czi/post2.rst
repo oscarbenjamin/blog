@@ -233,6 +233,7 @@ domains:
 - ``K[x,y]``: multivariate polynomials in ``x`` and ``y``.
 - ``K(x,y)``: rational functions (ratios of polynomials) in ``x`` and ``y``.
 - ``EX``: The expression domain (basically the symbolic subsystem)
+- ``EXRAW``: The raw expression domain.
 
 There are more domains but these are the most important ones. Perhaps the
 easiest way to see what the domains are for is by using the
@@ -408,3 +409,179 @@ idea to even try to compute the primitive element and that it is better to
 represent algebraic number fields differently in the case of having many
 algebraic generators.
 
+EX and EXRAW domains
+--------------------
+
+There are more domains than listed above but those are the ones that would
+usually be created automatically within SymPy when the computational algebra
+subsystem is used implicitly. There will always be some situations where the
+symbolic subsystem has some expressions that the computational algebra
+subsystem cannot represent using a standard ring/field from the list above. In
+those situations it will use the ``EX`` or ``EXRAW`` domains. In these domains
+the elements are actually just symbolic expressions from the symbolic
+subsystem. This provides an escape hatch that allows code that expects to work
+with the domains to fall back on using the symbolic subsystem when a more
+structured domain cannot be found.
+
+The difference between the ``EX`` and ``EXRAW`` domains is that the elements of
+the ``EX`` domain are always simplified using the high-level ``cancel``
+function so in this domain ``c = b + a`` is equivalent to writing ``c =
+cancel(b + a)`` with ordinary SymPy expressions from the symbolic subsystem.
+The effect of ``cancel`` on a symbolic expression is that always rearranges an
+expression into something like a ratio of expanded polynomials and then cancels
+the polynomial gcd of the numerator and denominator::
+
+    >>> from sympy import symbols, cancel
+    >>> x, y = symbols('x, y')
+    >>> e = 1/x + x
+    >>> e
+    x + 1/x
+    >>> cancel(e)
+    (x**2 + 1)/x
+
+Calling ``cancel`` on symbolic expressions like this is slow because every call
+to to ``cancel`` has to go through the whole process of identifying a
+polynomial representation, choosing a domain, converting the expressions into
+the domain and then after actually computing the cancelled fraction the result
+needs to be convert back to the symbolic subsystem. If this sort of
+simplification is wanted then it is always better to use any of the more
+structured domains above than to use ``EX`` because it avoids all the cost of
+these conversions.
+
+For some algorithms the automatic expansion and cancellation used in ``EX`` is
+exactly what is needed as a method of intermediate simplification to speed up a
+large calculation and return a result in a mostly canonical form. In some
+situations though it is preferrable not to have this cancellation (which in
+itself can be slow) and for this the ``EXRAW`` domain is provided. Operations
+with the ``EXRAW`` domain are precisely equivalent to operations in the
+symbolic subsystem (without calling ``cancel``). All the reasons that it is
+difficult to build heavy algorithms over the symbolic subsystem apply to the
+``EXRAW`` domain as well. The ``EXRAW`` domain is only really useful for
+preserving existing behaviour in a situation where we want to change code that
+currently uses the symbolic system to use the computational algebra subsystem
+instead. It would almost always be better to use something other than ``EXRAW``
+(even if just ``EX``) but if we want to be conservative when making changes
+then ``EXRAW`` provides a possible compatibility mechanism.
+
+Using the right domains
+-----------------------
+
+Having talked a lot about the domain system above I can now explain how that
+relates to things sometimes being slow in SymPy and what can be done to improve
+that.
+
+Firstly, when implementating any arithmetic heavy algorithm like solving a
+system of linear equations all of the domains desribed above apart from ``EX``
+or ``EXRAW`` are almost always faster than any algorithm that could be
+implemented directly with symbolic expressions. The number one reason for
+slowness in things like computing the inverse of a matrix is just the fact that
+many such algorithms do not use the domain system at all and instead use the
+symbolic subsystem.
+
+Secondly, in many cases the ``EX`` domain is used when it would not be
+difficult to choose a better domain instead. This is because the mechanism for
+constructing domains is quite conservative about what it will accept. An
+example would be::
+
+    >>> from sympy import *
+    >>> x, y = symbols('x, y')
+    >>> construct_domain([x + y])
+    (ZZ[x,y], [x + y])
+    >>> t = symbols('t')
+    >>> x = Function('x')
+    >>> y = Function('y')
+    >>> construct_domain([x(t) + y(t)])
+    (EX, [EX(x(t) + y(t))])
+
+Here the functions ``x(t)`` and ``y(t)`` should be treated the same as ``x``
+and ``y``. A suitable domain can easily be created explicitly::
+
+    >>> domain = ZZ[x(t),y(t)]
+    >>> domain.from_sympy(x(t) + y(t))
+    (x(t)) + (y(t))
+
+The problem here is just that the code inside ``construct_domain`` rejects this
+domain because it does not want to create a polynomial ring where the
+generators have free symbols in common (the ``t`` in this case). The reason for
+rejecting this is to try to avoid something like this::
+
+    >>> ZZ[sin(t),cos(t)]
+    ZZ[sin(t),cos(t)]
+
+This ``ZZ[sin(t),cos(t)]`` domain is invalid for many situations. the problem
+with it is that it is possible to create an expression that should really be
+zero but appears not to be zero::
+
+    >>> R = ZZ[sin(t),cos(t)]
+    >>> s = R.from_sympy(sin(t))
+    >>> c = R.from_sympy(cos(t))
+    >>> e = s**2 + c**2 - 1
+    >>> e
+    (sin(t))**2 + (cos(t))**2 - 1
+    >>> R.is_zero(e)
+    False
+    >>> R.to_sympy(e).trigsimp()
+    0
+
+One of the reasons that arithmetic heavy algorithms with domains are so much
+faster than with symbolic expressions is because in the domain system any
+expression that is equal to zero should be simplified automatically to zero.
+Many algorithms need to know whether expressions are zero or not so this is an
+extremely useful property. Just treating ``sin(t)`` and ``cos(t)`` as
+independent variables in a polynomial ring violates this property. Sometimes
+that would be fine but in other situations it could lead to bugs. Therefore
+``construct_domain`` refuses to create the ring ``ZZ[sin(t),cos(t)]`` to avoid
+bugs. This refusal leads to the ``EX`` domain being used which is much slower
+and also potentially subject to precisely the same bugs. The advantage of using
+the ``EX`` domain here is mainly that other code can at least be aware that the
+domain is not well defined.
+
+It is perfectly possible to implement a domain that can represent a ring
+involving both ``sin(t)`` and ``cos(t)``. There are already some kinds of
+domains that can do this although they are not used by default and also are not
+quite right for what is needed. What we really want is to be able to make a 
+more complicated ring like this::
+
+    QQ[sqrt(2),m1,m2,k1,k2,sin(theta),cos(theta),sin(phi),cos(phi)]
+
+In science and engineering the need to work with ``sin`` and ``cos`` is very
+common so specialised domains are needed that can handle this for many
+different variables and can recognise trig identities etc. SymPy does not yet
+have this but adding it would mostly complete the domain system in terms of
+being able to represent the sorts of expressions that users typically want to
+work with. This would be particularly beneficial for example in the case of
+symbolic calculations in mechanics (as in the ``sympy.physics.mechanics``
+module). I have an implementation of a domain that could represent the ring
+above using sparse polynomials and Groebner bases but it is still incomplete.
+
+There are then three ways that things might become slower than they should be
+when using the domain system:
+
+- Sometimes the ``EX`` domain is used conservatively when suitable
+  alternative domains are already there and could easily be used.
+- Sometimes a suitable domain is not yet implemented (e.g. ``sin/cos``).
+
+In either case the result is that a calculation ends up using the ``EX`` domain
+which is a lot slower than any of the other domains. The fixes are simple:
+
+- Improve the logic for deciding which domains are used by default.
+- Add new domains that can represent things like ``sin`` and ``cos`` for
+  example.
+
+Neither of these changes is especially hard to make but in either case the
+impact of making such a change can be far reaching and hard to predict in full.
+Each time some calculation is switched from the ``EX`` domain to a more
+structured domain the main effect is to make things (much) faster, and a
+secondary effect is that it potentially reduces bugs. The third effect is that
+it leads to the output of the calculation being in a "more canonical" form
+which is a good thing but it is a change in output in some sense and it is the
+impact of this change that is hard to predict.
+
+Speeding up the domains
+-----------------------
+
+I talked a lot above about the speed of ``ZZ`` and ``QQ`` when using gmpy2 or
+otherwise. The other domains are all implemented in SymPy's ``sympy.polys``
+module in pure Python code. Mostly the algorithms used are reasonable and the
+code is well micro-optimised but the limitation is just that it is not possible
+to make things faster while working in pure Python.
