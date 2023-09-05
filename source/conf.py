@@ -31,3 +31,11 @@ extensions = [
     'sphinx.ext.graphviz',
 ]
 graphviz_output_format = 'svg'
+
+# https://sphinx-comments.readthedocs.io/en/latest/utterances.html
+comments_config = {
+   "utterances": {
+      "repo": "github-org/github-repo",
+      "optional": "config",
+   }
+}
