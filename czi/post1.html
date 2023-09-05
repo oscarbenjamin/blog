@@ -1,20 +1,21 @@
 <!DOCTYPE html>
 
-<html lang="en">
+<html lang="en" data-content_root="../">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Towards a new SymPy: part 1 &#8212; blog  documentation</title>
+    <title>Towards a new SymPy: part 1 - Outline &#8212; blog  documentation</title>
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=4f649999" />
     <link rel="stylesheet" type="text/css" href="../_static/alabaster.css?v=039e1c02" />
     <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=eafc0fe6" />
-    <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js?v=b3ba4146"></script>
+    <script src="../_static/documentation_options.js?v=5929fcd5"></script>
     <script src="../_static/doctools.js?v=888ff710"></script>
-    <script src="../_static/sphinx_highlight.js?v=4825356b"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Towards a new SymPy: part 2 - Polynomials" href="post2.html" />
     <link rel="prev" title="Towards a new SymPy" href="index.html" />
    
   <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
@@ -32,8 +33,8 @@
 
           <div class="body" role="main">
             
-  <section id="towards-a-new-sympy-part-1">
-<h1>Towards a new SymPy: part 1<a class="headerlink" href="#towards-a-new-sympy-part-1" title="Permalink to this heading">¶</a></h1>
+  <section id="towards-a-new-sympy-part-1-outline">
+<h1>Towards a new SymPy: part 1 - Outline<a class="headerlink" href="#towards-a-new-sympy-part-1-outline" title="Link to this heading">¶</a></h1>
 <p>This is the first part of a series of posts on big changes for SymPy with
 particular focus on speed. What I am going to describe in these posts are:</p>
 <ul class="simple">
@@ -58,7 +59,7 @@ audience for many of the points that I will make. Many of the things that I
 will describe here are not well understood even by many SymPy developers though
 and a major goal of this series of posts is to help to try to change that.</p>
 <section id="what-is-a-cas">
-<h2>What is a CAS?<a class="headerlink" href="#what-is-a-cas" title="Permalink to this heading">¶</a></h2>
+<h2>What is a CAS?<a class="headerlink" href="#what-is-a-cas" title="Link to this heading">¶</a></h2>
 <p>There are many different kinds of computer algebra system (CAS) and they have
 different intended uses that are driven by their different kinds of authors,
 contributors and users. Some like SageMath are directed more at pure
@@ -112,7 +113,7 @@ but most SymPy users and developers are from a scientific background and that
 has a big influence on the way that SymPy is developed.</p>
 </section>
 <section id="the-core-of-a-cas">
-<h2>The “core” of a CAS<a class="headerlink" href="#the-core-of-a-cas" title="Permalink to this heading">¶</a></h2>
+<h2>The “core” of a CAS<a class="headerlink" href="#the-core-of-a-cas" title="Link to this heading">¶</a></h2>
 <p>Different people will have different ideas about what the “core” of a CAS like
 SymPy is. For example users might think of functions like <code class="docutils literal notranslate"><span class="pre">solve</span></code> or
 <code class="docutils literal notranslate"><span class="pre">integrate</span></code> as being the core functions but these are really high level
@@ -137,7 +138,7 @@ SymPy those are all built on top of these three pieces as the foundation for
 everything else.</p>
 </section>
 <section id="a-robust-numerical-evaluation-subsystem">
-<h2>A robust numerical evaluation subsystem<a class="headerlink" href="#a-robust-numerical-evaluation-subsystem" title="Permalink to this heading">¶</a></h2>
+<h2>A robust numerical evaluation subsystem<a class="headerlink" href="#a-robust-numerical-evaluation-subsystem" title="Link to this heading">¶</a></h2>
 <p>Above I use the word “numerical” to mean calculations that are done with
 machine precision floating point numbers. This is the usual intended meaning of
 the word but this use of the word is tricky because in the context of a CAS we
@@ -303,7 +304,7 @@ robust numerics and should ultimately provide the option to use the Arb library
 as the basis for this subsystem.</p>
 </section>
 <section id="the-symbolic-expression-system">
-<h2>The symbolic expression system<a class="headerlink" href="#the-symbolic-expression-system" title="Permalink to this heading">¶</a></h2>
+<h2>The symbolic expression system<a class="headerlink" href="#the-symbolic-expression-system" title="Link to this heading">¶</a></h2>
 <p>SymPy’s symbolic expression system is the second component of what I call the
 “core” of SymPy and is located in the <code class="docutils literal notranslate"><span class="pre">sympy.core</span></code> package. This is what most
 SymPy users and contributors are used to working with. This system defines
@@ -366,7 +367,7 @@ The problems manifest both in terms of:</p>
 change are far reaching and unpredictable.</p></li>
 </ul>
 <section id="what-about-symengine">
-<h3>What about SymEngine?<a class="headerlink" href="#what-about-symengine" title="Permalink to this heading">¶</a></h3>
+<span id="symengine"></span><h3>What about SymEngine?<a class="headerlink" href="#what-about-symengine" title="Link to this heading">¶</a></h3>
 <p>In terms of speed one approach that has been mooted for making the symbolic
 subsystem faster is to rewrite the “core” in e.g. C++ and this is essentially
 what SymEngine is. So one possibility to make SymPy faster would be to use
@@ -455,7 +456,7 @@ disable it:</p>
 </div>
 </section>
 <section id="a-new-symbolic-subsystem">
-<h3>A new symbolic subsystem<a class="headerlink" href="#a-new-symbolic-subsystem" title="Permalink to this heading">¶</a></h3>
+<h3>A new symbolic subsystem<a class="headerlink" href="#a-new-symbolic-subsystem" title="Link to this heading">¶</a></h3>
 <p>What SymPy needs is a symbolic subsystem that is <em>not</em> based on automatic
 evaluation. Of course many users would still want automatic evaluation and
 there should be a way to provide that. It is <em>easy</em> though to build a system
@@ -517,7 +518,7 @@ separate blog post.</p>
 </section>
 </section>
 <section id="the-computational-algebra-subsystem">
-<h2>The computational algebra subsystem<a class="headerlink" href="#the-computational-algebra-subsystem" title="Permalink to this heading">¶</a></h2>
+<h2>The computational algebra subsystem<a class="headerlink" href="#the-computational-algebra-subsystem" title="Link to this heading">¶</a></h2>
 <p>SymPy’s computational algebra subsystem is the third component of what I call
 the “core” of SymPy and is located in the <code class="docutils literal notranslate"><span class="pre">sympy.polys</span></code> package. This
 subsystem is underused and underappreciated but is absolutely critical to
@@ -631,7 +632,7 @@ top-level modules (this includes tests, comments, docstrings etc):</p>
 <span class="n">multipledispatch</span>   <span class="mi">1239</span>
 </pre></div>
 </div>
-<p>The other things listed as “topics” along side <code class="docutils literal notranslate"><span class="pre">polys</span></code> are <code class="docutils literal notranslate"><span class="pre">geometry</span></code>,
+<p>The other things listed as “topics” alongside <code class="docutils literal notranslate"><span class="pre">polys</span></code> are <code class="docutils literal notranslate"><span class="pre">geometry</span></code>,
 <code class="docutils literal notranslate"><span class="pre">holonomic</span></code>, <code class="docutils literal notranslate"><span class="pre">liealgebras</span></code>, <code class="docutils literal notranslate"><span class="pre">categories</span></code>, <code class="docutils literal notranslate"><span class="pre">crypto</span></code>, <code class="docutils literal notranslate"><span class="pre">diffgeom</span></code>,
 <code class="docutils literal notranslate"><span class="pre">plotting</span></code>, and <code class="docutils literal notranslate"><span class="pre">stats</span></code>. Some of these are barely used by anyone while
 others like <code class="docutils literal notranslate"><span class="pre">plotting</span></code> are widely used and should also not be listed here.
@@ -647,7 +648,7 @@ Higher level functions that like <code class="docutils literal notranslate"><spa
 scientists and engineers need to be built on top of a computational algebra
 subsystem in order to be fast and reliable.</p>
 <section id="maintenance-of-the-computational-algebra-subsystem">
-<h3>Maintenance of the computational algebra subsystem<a class="headerlink" href="#maintenance-of-the-computational-algebra-subsystem" title="Permalink to this heading">¶</a></h3>
+<h3>Maintenance of the computational algebra subsystem<a class="headerlink" href="#maintenance-of-the-computational-algebra-subsystem" title="Link to this heading">¶</a></h3>
 <p>When I started working on SymPy I did not have a background in computational
 algebra and I also did not understand how to use this subsystem (the <code class="docutils literal notranslate"><span class="pre">polys</span></code>
 module). Over time I have learned more about it and I have also learned how to
@@ -700,7 +701,7 @@ understand it and make improvements to it and we are now in a better position
 to improve its capabilities and expand its use within SymPy.</p>
 </section>
 <section id="improvements-to-the-computational-algebra-subsystem">
-<h3>Improvements to the computational algebra subsystem<a class="headerlink" href="#improvements-to-the-computational-algebra-subsystem" title="Permalink to this heading">¶</a></h3>
+<h3>Improvements to the computational algebra subsystem<a class="headerlink" href="#improvements-to-the-computational-algebra-subsystem" title="Link to this heading">¶</a></h3>
 <p>Above I casually suggested that the numeric subsystem should be completely
 rewritten to use Arb-like semantics. I then went on to say that the symbolic
 subsystem should be rewritten (which is a major undertaking for SymPy!). I
@@ -728,7 +729,7 @@ subsequent post.</p>
 </section>
 </section>
 <section id="summary">
-<h2>Summary<a class="headerlink" href="#summary" title="Permalink to this heading">¶</a></h2>
+<h2>Summary<a class="headerlink" href="#summary" title="Link to this heading">¶</a></h2>
 <p>Above I have described what I consider to be the subsystems that make up the
 core of SymPy and what the current state of each of them is, as well as what I
 think needs to be done to improve them. In subsequent posts I will talk about
@@ -766,7 +767,8 @@ its algorithms and also by leveraging Flint.</p></li>
 <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul class="current">
 <li class="toctree-l1 current"><a class="reference internal" href="index.html">Towards a new SymPy</a><ul class="current">
-<li class="toctree-l2 current"><a class="current reference internal" href="#">Towards a new SymPy: part 1</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Towards a new SymPy: part 1 - Outline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="post2.html">Towards a new SymPy: part 2 - Polynomials</a></li>
 </ul>
 </li>
 </ul>
@@ -777,6 +779,7 @@ its algorithms and also by leveraging Flint.</p></li>
   <li><a href="../index.html">Documentation overview</a><ul>
   <li><a href="index.html">Towards a new SymPy</a><ul>
       <li>Previous: <a href="index.html" title="previous chapter">Towards a new SymPy</a></li>
+      <li>Next: <a href="post2.html" title="next chapter">Towards a new SymPy: part 2 - Polynomials</a></li>
   </ul></li>
   </ul></li>
 </ul>
@@ -807,7 +810,7 @@ its algorithms and also by leveraging Flint.</p></li>
       &copy;2023, Oscar Benjamin.
       
       |
-      Powered by <a href="http://sphinx-doc.org/">Sphinx 7.1.2</a>
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 7.2.5</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.13</a>
       
       |

@@ -13,3 +13,4 @@ Towards a new SymPy
    :caption: Contents:
 
    post1.rst
+   post2.rst

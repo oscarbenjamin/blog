@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Towards a new SymPy: part 2 - Polynomials &#8212; blog  documentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=4f649999" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css?v=039e1c02" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=eafc0fe6" />
+    <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../_static/doctools.js?v=888ff710"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="prev" title="Towards a new SymPy: part 1 - Outline" href="post1.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="towards-a-new-sympy-part-2-polynomials">
+<h1>Towards a new SymPy: part 2 - Polynomials<a class="headerlink" href="#towards-a-new-sympy-part-2-polynomials" title="Link to this heading">¶</a></h1>
+<p>This is the second part of a series of posts on big changes for SymPy with
+particular focus on speed. The other posts in this series can be found at
+<a class="reference internal" href="index.html#new-sympy"><span class="std std-ref">Towards a new SymPy</span></a>. The first post outlined what I consider to be the three
+core subsystems of SymPy:</p>
+<ol class="arabic simple">
+<li><p>Robust numerical evaluation (<code class="docutils literal notranslate"><span class="pre">sympy.core.evalf</span></code>)</p></li>
+<li><p>The symbolic subsystem (<code class="docutils literal notranslate"><span class="pre">sympy.core.basic</span></code>)</p></li>
+<li><p>The computational algebra subsystem (<code class="docutils literal notranslate"><span class="pre">sympy.polys</span></code>)</p></li>
+</ol>
+<p>In relation to the computational algebra subsystem, there are three ways in
+which SymPy can be made faster:</p>
+<ol class="arabic simple">
+<li><p>Improve/extend some of the algorithms and features.</p></li>
+<li><p>Make more use of the computational algebra subsystem in the rest of SymPy.</p></li>
+<li><p>Make use of FLINT which is a fast C library for computational algebra.</p></li>
+</ol>
+<p>This post will describe SymPy’s computational algebra system for polynomials
+and how each of these steps could be applied to speed up SymPy. I will talk a
+bit about FLINT and python-flint but I will also write a separate post about
+those because I know that some people will be more interested in using
+python-flint than SymPy itself and I hope to encourage them to contribute to
+python-flint.</p>
+<p>As before I am writing this with the intention that it should be to some extent
+understandable to non SymPy developers. The primary intended audience though is
+other SymPy developers because I want them to understand the significance of
+the work done so far and the changes that I think are needed for the future.
+This post is quite long mainly because there are a lot of details about the
+computational algebra subsystem that I want the intended audience to
+understand.</p>
+<section id="integers-and-rationals">
+<h2>Integers and rationals<a class="headerlink" href="#integers-and-rationals" title="Link to this heading">¶</a></h2>
+<p>First, I will give a brief overview of the computational algebra subsystem. In
+SymPy the computational algebra subsystem is located in the <code class="docutils literal notranslate"><span class="pre">sympy.polys</span></code>
+module. The lowest level of this system are the “domains” which are objects
+that represent rings and fields. Briefly a ring is a set of “elements” that can
+be added and multiplied and a field is a ring in which it is also possible to
+divide any two elements (except 0). The most well known examples of each are
+the ring of integers <span class="math notranslate nohighlight">\(\mathbf{Z}\)</span> and the field of rational numbers
+<span class="math notranslate nohighlight">\(\mathbf{Q}\)</span>.</p>
+<p>Engineers and scientists (rather than pure mathematicians) might wonder why we
+need to distinguish carefully between e.g. the “ring” of integers or the
+“field” of rationals and worry about whether or not division is “possible”. In
+some sense we can always divide two integers (except 0) and just get a rational
+number. Certainly in SymPy’s <em>symbolic</em> subsystem there is no difficulty in
+dividing two integers although we do need to be careful to divide SymPy’s
+<code class="docutils literal notranslate"><span class="pre">Integer</span></code> objects and not Python’s <code class="docutils literal notranslate"><span class="pre">int</span></code> objects (whose division operator
+gives <code class="docutils literal notranslate"><span class="pre">float</span></code>):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="n">Integer</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">Integer</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="n">Integer</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>  <span class="c1"># dividing Integer gives Rational</span>
+<span class="go">1/2</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="mi">1</span><span class="o">/</span><span class="mi">2</span>  <span class="c1"># dividing ints gives floats</span>
+<span class="go">0.5</span>
+</pre></div>
+</div>
+<p>The basic reasons that we need to distinguish carefully between rings and
+fields and between <span class="math notranslate nohighlight">\(\mathbf{Z}\)</span> and <span class="math notranslate nohighlight">\(\mathbf{Q}\)</span> specifically are
+not particularly deep or mathematical but rather purely <em>computational</em>.
+Efficient computing means having well defined types, representations and
+operations. On a very basic level the representation of an integer is a
+sequence of bits and the representation of a rational number is a pair of
+integers. Arithmetic operations manipulate these representations and so an
+efficient arithmetic heavy algorithm needs to use a well defined representation
+for its elementary types. If we choose our representation to be
+<span class="math notranslate nohighlight">\(\mathbf{Z}\)</span> then we cannot represent <span class="math notranslate nohighlight">\(1/2\)</span> without converting to a
+different representation and so (inexact) division is not allowed. Of course we
+can always convert any element of <span class="math notranslate nohighlight">\(\mathbf{Z}\)</span> to an element of
+<span class="math notranslate nohighlight">\(\mathbf{Q}\)</span> but this conversion is not a free operation and the
+representation as an element of <span class="math notranslate nohighlight">\(\mathbf{Q}\)</span> would be less efficient if
+actually all of our elements are integers and if we do not need to divide them.</p>
+<p>The other reason that we need to distinguish between e.g. <span class="math notranslate nohighlight">\(\mathbf{Z}\)</span>
+and <span class="math notranslate nohighlight">\(\mathbf{Q}\)</span> in particular or more generally between different
+“domains” is that we usually want to use different algorithms for different
+domains. For example, the most efficient algorithm for inverting a matrix or
+solving a linear system of equations over <span class="math notranslate nohighlight">\(\mathbf{Z}\)</span> is different from
+the most efficient algorithm for doing the same over <span class="math notranslate nohighlight">\(\mathbf{Q}\)</span>. Often
+the algorithms will convert to different domains for example to invert a matrix
+of integers we might convert to <span class="math notranslate nohighlight">\(\mathbf{Q}\)</span> and use a division-based
+algorithm. Alternatively to invert a matrix of rational numbers we might factor
+out denominators and convert to a matrix over <span class="math notranslate nohighlight">\(\mathbf{Z}\)</span> before using a
+fraction-free algorithm for inverting a matrix over <span class="math notranslate nohighlight">\(\mathbf{Z}\)</span>.</p>
+<p>In SymPy’s domain system, there are domain objects like <code class="docutils literal notranslate"><span class="pre">ZZ</span></code> and <code class="docutils literal notranslate"><span class="pre">QQ</span></code> that
+represent <span class="math notranslate nohighlight">\(\mathbf{Z}\)</span> and <span class="math notranslate nohighlight">\(\mathbf{Q}\)</span> respectively. These domain
+objects are used to construct elements of the domain and to convert between
+domains e.g.:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="n">ZZ</span><span class="p">,</span> <span class="n">QQ</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">QQ</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">)</span>  <span class="c1"># construct an element of QQ</span>
+<span class="go">MPQ(2,3)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">QQ</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>  <span class="c1"># construct an integer-valued element of QQ</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span>
+<span class="go">MPQ(2,1)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">z</span> <span class="o">=</span> <span class="n">ZZ</span><span class="o">.</span><span class="n">convert_from</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">QQ</span><span class="p">)</span>  <span class="c1"># convert from QQ to ZZ</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">z</span>
+<span class="go">2</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">z</span><span class="p">)</span>
+<span class="go">&lt;class &#39;int&#39;&gt;</span>
+</pre></div>
+</div>
+<p>In this example we construct the rational number <span class="math notranslate nohighlight">\(2/3\)</span>. Its
+representation is the <code class="docutils literal notranslate"><span class="pre">MPQ</span></code> type which is a pure Python implementation of
+rational numbers based on Python’s <code class="docutils literal notranslate"><span class="pre">int</span></code> type (analogous to the Python
+standard library <code class="docutils literal notranslate"><span class="pre">fractions.Fraction</span></code> type). The representation for <code class="docutils literal notranslate"><span class="pre">ZZ</span></code>
+uses Python’s <code class="docutils literal notranslate"><span class="pre">int</span></code> type.</p>
+</section>
+<section id="gmp-and-gmpy2">
+<h2>GMP and gmpy2<a class="headerlink" href="#gmp-and-gmpy2" title="Link to this heading">¶</a></h2>
+<p>I mentioned the two domains <code class="docutils literal notranslate"><span class="pre">ZZ</span></code> and <code class="docutils literal notranslate"><span class="pre">QQ</span></code> above and I will describe the
+other domains below. Since these two domains are absolutely foundational it is
+worth discussing their implementation a bit first because it is important to
+understand the role that gmpy2 and the underlying GMP C library play in this.
+If gmpy2 is installed then SymPy will use its <code class="docutils literal notranslate"><span class="pre">mpz</span></code> and <code class="docutils literal notranslate"><span class="pre">mpq</span></code> types for
+<code class="docutils literal notranslate"><span class="pre">ZZ</span></code> and <code class="docutils literal notranslate"><span class="pre">QQ</span></code> respectively. These are based on the underlying GMP C
+library:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="n">ZZ</span><span class="p">,</span> <span class="n">QQ</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ZZ</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>  <span class="c1"># pip install gmpy2 to see this</span>
+<span class="go">mpz(2)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">QQ</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">)</span>
+<span class="go">mpq(2,3)</span>
+</pre></div>
+</div>
+<p>Here are plots that can compare timings for multiplication of integers with and
+without gmpy2 for different bit sizes:</p>
+<img alt="../_images/time_ZZ.svg" src="../_images/time_ZZ.svg" /><p>For small integers <code class="docutils literal notranslate"><span class="pre">mpz</span></code> is about the same speed as Python’s <code class="docutils literal notranslate"><span class="pre">int</span></code> type.
+Potentially <code class="docutils literal notranslate"><span class="pre">mpz</span></code> is actually a little slower for very small integers just
+because CPython’s <code class="docutils literal notranslate"><span class="pre">int</span></code> is heavily micro-optimised for small integers. In
+Python all integers use a single arbitrary precision type <code class="docutils literal notranslate"><span class="pre">int</span></code> which is
+unusual among programming languages. Since most integers are small, CPython
+tries to optimise for this case. Possibly also CPython can do some
+optimisations with <code class="docutils literal notranslate"><span class="pre">int</span></code> that it cannot do with “third party types” like
+gmpy2’s <code class="docutils literal notranslate"><span class="pre">mpz</span></code>.</p>
+<p>For larger integers (bigger than machine precision) both <code class="docutils literal notranslate"><span class="pre">mpz</span></code> and <code class="docutils literal notranslate"><span class="pre">int</span></code>
+will represent an integer using multiple “digits” although the digits are
+referred to as “limbs” in GMP. CPython uses 30-bit limbs because its
+implementation of integer arithmetic is designed to be portable “generic C”
+that can be compiled by any compiler. By contrast GMP’s implementation is
+designed to be as fast as possible at all costs and so it uses handcrafted
+assembly code for many different CPU architectures. In CPU specific assembly it
+is possible to access instructions like <code class="docutils literal notranslate"><span class="pre">mulx</span></code> or to read the CPU’s carry
+flag after an addition etc. These things are essential for being able to use
+64-bit limbs but are not available in generic C. GMP’s <code class="docutils literal notranslate"><span class="pre">mpz</span></code> type therefore
+uses 64-bit limbs (as do all widely used fast big integer implementations).</p>
+<p>As the bit size increases say to 1000 bits then gmpy2’s <code class="docutils literal notranslate"><span class="pre">mpz</span></code> becomes a lot
+faster than CPython’s <code class="docutils literal notranslate"><span class="pre">int</span></code>. At this bit size the difference in speed to
+multiply two integers is something like 10x and is primarily due to the fact
+that <code class="docutils literal notranslate"><span class="pre">mpz</span></code> uses 64-bit limbs whereas <code class="docutils literal notranslate"><span class="pre">int</span></code> uses 30-bit limbs. This smaller
+limb-size essentially means a 4x increase in the number of CPU-level operations
+needed for a big integer multiplication.</p>
+<p>For very large integers gmpy2’s <code class="docutils literal notranslate"><span class="pre">mpz</span></code> is <em>much</em> faster than <code class="docutils literal notranslate"><span class="pre">int</span></code>. This is
+because GMP has a whole hierarchy of algorithms for different bit sizes.
+CPython’s <code class="docutils literal notranslate"><span class="pre">int</span></code> type tops out at the Karatsuba algorithm which is also used
+by GMP for intermediate bit-sizes but GMP has more complex algorithms that are
+used for larger bit sizes. At these large bit sizes the difference in speed
+between <code class="docutils literal notranslate"><span class="pre">mpz</span></code> and <code class="docutils literal notranslate"><span class="pre">int</span></code> can be enormous. Here we focus on multiplication
+which is probably more favourable to <code class="docutils literal notranslate"><span class="pre">int</span></code> than some other operations would
+be. In fact the slowness of some algorithms used by CPython’s <code class="docutils literal notranslate"><span class="pre">int</span></code> type was
+even recently considered to be a security vulnerability to the extent that
+certain operations were disabled:</p>
+<p><a class="reference external" href="https://discuss.python.org/t/int-str-conversions-broken-in-latest-python-bugfix-releases/18889">https://discuss.python.org/t/int-str-conversions-broken-in-latest-python-bugfix-releases/18889</a></p>
+<p>That did lead to some work on improving CPython’s <code class="docutils literal notranslate"><span class="pre">int</span></code> algorithms but the
+disabled operations remain disabled even though the algorithms have been
+improved to some extent:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">math</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">x</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">factorial</span><span class="p">(</span><span class="mi">1559</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<span class="gp">...</span>
+<span class="go">ValueError: Exceeds the limit (4300 digits) for integer string conversion;</span>
+<span class="go">use sys.set_int_max_str_digits() to increase the limit</span>
+</pre></div>
+</div>
+<p>This plot shows timings for multiplication of rational numbers with and without
+gmpy2 for different bit sizes:</p>
+<img alt="../_images/time_QQ.svg" src="../_images/time_QQ.svg" /><p>For small rational numbers gmpy2’s <code class="docutils literal notranslate"><span class="pre">mpq</span></code> type is about 10x faster than
+SymPy’s pure Python <code class="docutils literal notranslate"><span class="pre">MPQ</span></code> type when both are used from Python code for
+multiplication as shown here. The difference can be up to about 20x for general
+arithmetic-heavy algorithms. This difference is primarily due to gmpy2
+implementing this in C and SymPy’s <code class="docutils literal notranslate"><span class="pre">PythonMPQ</span></code> being implemented in pure
+Python. For intermediate bit sizes gmpy2’s <code class="docutils literal notranslate"><span class="pre">mpq</span></code> is only about 2-3x faster
+because the bulk of the time is spent in <code class="docutils literal notranslate"><span class="pre">gcd</span></code> and CPython’s <code class="docutils literal notranslate"><span class="pre">math.gcd</span></code>
+function is implemented in C (the Python overhead is less significant at larger
+bit sizes). The difference in timings here most likely reflects GMP being more
+microoptimised with CPU-specific assembly, 64-bit limbs etc. At larger bit
+sizes gmpy2’s <code class="docutils literal notranslate"><span class="pre">mpq</span></code> becomes asymptotically faster and this is again due to
+asymptotically faster integer multiplication: every integer operation including
+<code class="docutils literal notranslate"><span class="pre">gcd</span></code> will ultimately reduce to multiplication at large sizes.</p>
+<p>What this all means is that for some operations SymPy is a lot faster when
+gmpy2 is installed. Some people reading this might think that it seems absurd
+to worry about the performance of megabyte sized integers but many symbolic
+algorithms will generate much larger integers than might be expected. Also when
+gmpy2 is installed it will be used by mpmath and so it speeds up SymPy’s
+numeric subsystem as well as the computational algebra subsystem.</p>
+<p>The symbolic subsystem is the only one of the three core subsystems of SymPy
+that does not use gmpy2. I did recently look at changing SymPy to have the
+symbolic <code class="docutils literal notranslate"><span class="pre">Integer</span></code> and <code class="docutils literal notranslate"><span class="pre">Rational</span></code> types use <code class="docutils literal notranslate"><span class="pre">mpz</span></code> and <code class="docutils literal notranslate"><span class="pre">mpq</span></code> when gmpy2
+is installed but hit a stumbling block that the symbolic subsystem allows
+“unevaluated rationals” whose gcd is not cancelled:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="n">Rational</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">Rational</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="go">3/6</span>
+</pre></div>
+</div>
+<p>That is apparently documented behaviour. This is not really a useful feature
+though because the symbolic subsystem could also represent the same thing using
+<code class="docutils literal notranslate"><span class="pre">Mul</span></code> and <code class="docutils literal notranslate"><span class="pre">Pow</span></code>. Having the symbolic <code class="docutils literal notranslate"><span class="pre">Rational</span></code> type use gmpy2’s <code class="docutils literal notranslate"><span class="pre">mpq</span></code>
+for its internal representation would break these “unevaluated rationals” (that
+should be done anyway though).</p>
+<p>One of the nice things about the computational algebra subsystem is that it is
+possible to swap out the implementation of the domain objects like this. So on
+the one hand SymPy and its only hard dependency mpmath can be used as entirely
+pure Python code without gmpy2. This is useful for many people who do not need
+the performance of gmpy2 and do not want to install it or cannot install it for
+example if they use a different Python implementation like PyPy. On the other
+hand if gmpy2 is installed then SymPy will use it and will be a <em>lot</em> faster
+for some operations but with <em>no other observable change in behaviour</em>.</p>
+<p>(Contrast this last point with my previous comments about the difficulty of
+SymPy using SymEngine to speed up the symbolic subsystem in <a class="reference internal" href="post1.html#symengine"><span class="std std-ref">What about SymEngine?</span></a>)</p>
+</section>
+<section id="the-domain-system">
+<h2>The domain system<a class="headerlink" href="#the-domain-system" title="Link to this heading">¶</a></h2>
+<p>I have talked a lot about the two domains <code class="docutils literal notranslate"><span class="pre">ZZ</span></code> and <code class="docutils literal notranslate"><span class="pre">QQ</span></code> but there are many
+more domains in SymPy. You can read more about them here:</p>
+<p><a class="reference external" href="https://docs.sympy.org/latest/modules/polys/domainsintro.html">https://docs.sympy.org/latest/modules/polys/domainsintro.html</a></p>
+<p>People who are familiar with computational algebra will recognise these
+domains:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">GF(n)</span></code>: integers mod <code class="docutils literal notranslate"><span class="pre">n</span></code> (the name <code class="docutils literal notranslate"><span class="pre">GF</span></code> is misleading)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ZZ</span></code>: the integers</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">QQ</span></code>: the rational numbers</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ZZ_I</span></code>: Gaussian integers</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">QQ_I</span></code>: Gaussian rationals</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">QQ(a)</span></code>: algebraic number field generated by <code class="docutils literal notranslate"><span class="pre">a</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">RR</span></code>: the real numbers (floats with fixed precision provided by mpmath)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">CC</span></code>: the complex numbers (complex floats with fixed precision)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">K[x]</span></code>: polynomials in e.g. <code class="docutils literal notranslate"><span class="pre">x</span></code> with coefficients in another domain <code class="docutils literal notranslate"><span class="pre">K</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">K[x,y]</span></code>: multivariate polynomials in <code class="docutils literal notranslate"><span class="pre">x</span></code> and <code class="docutils literal notranslate"><span class="pre">y</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">K(x,y)</span></code>: rational functions (ratios of polynomials) in <code class="docutils literal notranslate"><span class="pre">x</span></code> and <code class="docutils literal notranslate"><span class="pre">y</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">EX</span></code>: The expression domain (basically the symbolic subsystem)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">EXRAW</span></code>: The raw expression domain.</p></li>
+</ul>
+<p>There are more domains but these are the most important ones. Perhaps the
+easiest way to see what the domains are for is by using the
+<code class="docutils literal notranslate"><span class="pre">construct_domain</span></code> function. This function is used internally by SymPy to
+choose a domain that could represent some expression from the symbolic
+subsystem in the domain system:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">symbols</span><span class="p">(</span><span class="s1">&#39;x, y&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">construct_domain</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">])</span>
+<span class="go">(ZZ, [mpz(1), mpz(2)])</span>
+</pre></div>
+</div>
+<p>Here we asked for a domain that could represent both <code class="docutils literal notranslate"><span class="pre">1</span></code> and <code class="docutils literal notranslate"><span class="pre">2</span></code>. What was
+returned was the domain <code class="docutils literal notranslate"><span class="pre">ZZ</span></code> (meaning the integers) and a list of two
+elements representing <code class="docutils literal notranslate"><span class="pre">1</span></code> and <code class="docutils literal notranslate"><span class="pre">2</span></code> in that domain (as gmpy2 <code class="docutils literal notranslate"><span class="pre">mpz</span></code> objects
+in this case). We can try more examples:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">construct_domain</span><span class="p">([</span><span class="n">x</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+<span class="go">(ZZ[x], [x**2, 1])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">construct_domain</span><span class="p">([</span><span class="n">x</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="n">y</span><span class="p">])</span>
+<span class="go">(ZZ[x,y], [x**2, y])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">construct_domain</span><span class="p">([</span><span class="n">x</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="n">y</span><span class="o">/</span><span class="n">x</span><span class="p">])</span>
+<span class="go">(ZZ(x,y), [x**2, y/x])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">construct_domain</span><span class="p">([</span><span class="n">sin</span><span class="p">(</span><span class="n">x</span><span class="p">),</span> <span class="n">y</span><span class="p">])</span>
+<span class="go">(ZZ[y,sin(x)], [(sin(x)), y])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">construct_domain</span><span class="p">([</span><span class="n">x</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">])</span>
+<span class="go">(RR[x], [x, 2.0])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">construct_domain</span><span class="p">([</span><span class="n">x</span><span class="o">/</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+<span class="go">(QQ[x], [1/2*x, 1])</span>
+</pre></div>
+</div>
+<p>In each case <code class="docutils literal notranslate"><span class="pre">construct_domain</span></code> tries to find the simplest domain that can
+represent all the expressions.</p>
+</section>
+<section id="sparse-and-dense-polynomials">
+<h2>Sparse and dense polynomials<a class="headerlink" href="#sparse-and-dense-polynomials" title="Link to this heading">¶</a></h2>
+<p>Importantly the polynomial domains are always implemented as “sparse”
+polynomials. This means that only nonzero terms are stored. This example
+contrasts the sparse and dense representations of polynomials:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="n">QQ</span><span class="p">,</span> <span class="n">symbols</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">symbols</span><span class="p">(</span><span class="s1">&#39;x, y&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">e</span> <span class="o">=</span> <span class="n">x</span><span class="o">**</span><span class="mi">10</span> <span class="o">+</span> <span class="n">y</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">p_sparse</span> <span class="o">=</span> <span class="n">QQ</span><span class="p">[</span><span class="n">x</span><span class="p">,</span><span class="n">y</span><span class="p">]</span><span class="o">.</span><span class="n">convert</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">p_dense</span> <span class="o">=</span> <span class="n">e</span><span class="o">.</span><span class="n">as_poly</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>This is how the sparse <code class="docutils literal notranslate"><span class="pre">PolyElement</span></code> and the dense <code class="docutils literal notranslate"><span class="pre">Poly</span></code> usually look:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">p_sparse</span>
+<span class="go">x**10 + y</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">p_dense</span>
+<span class="go">Poly(x**10 + y, x, y, domain=&#39;ZZ&#39;)</span>
+</pre></div>
+</div>
+<p>This is what their internal representations look like:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nb">dict</span><span class="p">(</span><span class="n">p_sparse</span><span class="p">)</span> <span class="c1"># internal sparse representation</span>
+<span class="go">{(0, 1): mpq(1,1), (10, 0): mpq(1,1)}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">e</span><span class="o">.</span><span class="n">as_poly</span><span class="p">()</span><span class="o">.</span><span class="n">rep</span><span class="o">.</span><span class="n">rep</span>  <span class="c1"># internal dense representation</span>
+<span class="go">[[mpz(1)], [], [], [], [], [], [], [], [], [], [mpz(1), mpz(0)]]</span>
+</pre></div>
+</div>
+<p>Here the sparse representation is a dictionary mapping exponent tuples to
+coefficients. The dense representation is a list of lists of coefficients. The
+empty lists in the dense representation represent zero terms. The dense
+representation is described as “dense” because it needs to store zero terms
+explicitly.</p>
+</section>
+<section id="integers-mod-n">
+<h2>Integers mod <code class="docutils literal notranslate"><span class="pre">n</span></code><a class="headerlink" href="#integers-mod-n" title="Link to this heading">¶</a></h2>
+<p>Some domains that people might expect to be find in the domain system are
+missing like finite fields of non-prime order e.g. <code class="docutils literal notranslate"><span class="pre">GF(2**3)</span></code>. Essentially
+that is because most SymPy users are not interested in such things and the rest
+of the codebase does not need them. Some people have expressed interest in
+these and contributions are certainly welcome but I guess it has not happened
+because it is not considered high priority and most users who are interested in
+such things are more likely to use something like Sage rather than SymPy.</p>
+<p>Probably most SymPy users are not interested in <code class="docutils literal notranslate"><span class="pre">GF(n)</span></code> (integers mod <code class="docutils literal notranslate"><span class="pre">n</span></code>)
+either but that is there because it is needed for the algorithms in the other
+domains. Let me give an example to show how all of this is used:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="n">symbols</span><span class="p">,</span> <span class="n">factor</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">symbols</span><span class="p">(</span><span class="s1">&#39;x, y&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">e</span> <span class="o">=</span> <span class="n">x</span><span class="o">**</span><span class="mi">4</span> <span class="o">-</span> <span class="n">y</span><span class="o">**</span><span class="mi">4</span><span class="o">/</span><span class="mi">16</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">e</span>
+<span class="go">x**4 - y**4/16</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">factor</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+<span class="go">(2*x - y)*(2*x + y)*(4*x**2 + y**2)/16</span>
+</pre></div>
+</div>
+<p>So how does this work? First <code class="docutils literal notranslate"><span class="pre">factor</span></code> converts the expression to a polynomial
+with coefficients in some domain:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">p</span> <span class="o">=</span> <span class="n">e</span><span class="o">.</span><span class="n">as_poly</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">p</span>
+<span class="go">Poly(x**4 - 1/16*y**4, x, y, domain=&#39;QQ&#39;)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">p</span><span class="o">.</span><span class="n">domain</span>
+<span class="go">QQ</span>
+</pre></div>
+</div>
+<p>Here the <code class="docutils literal notranslate"><span class="pre">Poly</span></code> identifies that we have two variables <code class="docutils literal notranslate"><span class="pre">x</span></code> and <code class="docutils literal notranslate"><span class="pre">y</span></code> and
+that the coefficients are in the domain <code class="docutils literal notranslate"><span class="pre">QQ</span></code> (the rational numbers). We are
+now ready to call the factorisation algorithm. The factorisation algorithm for
+polynomials with coefficients in <code class="docutils literal notranslate"><span class="pre">QQ</span></code> will first factor out the denominator
+<code class="docutils literal notranslate"><span class="pre">16</span></code> giving a polynomial <code class="docutils literal notranslate"><span class="pre">16*x**4</span> <span class="pre">-</span> <span class="pre">y**4</span></code> with coefficients in <code class="docutils literal notranslate"><span class="pre">ZZ</span></code>. We
+now want to factorise this but then the algorithm for factorising polynomials
+over <code class="docutils literal notranslate"><span class="pre">ZZ</span></code> will convert the problem to factorising polynomials over <code class="docutils literal notranslate"><span class="pre">GF(p)</span></code>
+for some prime <code class="docutils literal notranslate"><span class="pre">p</span></code>. Then we compute the factorisation over <code class="docutils literal notranslate"><span class="pre">GF(p)</span></code> and
+convert the result back to a factorisation over <code class="docutils literal notranslate"><span class="pre">ZZ</span></code> and so on. So the steps
+in the computation are (with <code class="docutils literal notranslate"><span class="pre">EX</span></code> representing the ordinary symbolic
+expressions):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">EX</span> <span class="o">-&gt;</span> <span class="n">QQ</span><span class="p">[</span><span class="n">x</span><span class="p">,</span><span class="n">y</span><span class="p">]</span> <span class="o">-&gt;</span> <span class="n">ZZ</span><span class="p">[</span><span class="n">x</span><span class="p">,</span><span class="n">y</span><span class="p">]</span> <span class="o">-&gt;</span> <span class="n">GF</span><span class="p">(</span><span class="n">p</span><span class="p">)[</span><span class="n">x</span><span class="p">,</span><span class="n">y</span><span class="p">]</span> <span class="o">-&gt;</span> <span class="n">factored</span> <span class="o">-&gt;</span> <span class="o">...</span> <span class="o">-&gt;</span> <span class="n">EX</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">...</span></code> here obscures a bunch of complexity that I don’t want to get into.
+For those familiar with these things the <code class="docutils literal notranslate"><span class="pre">Zassenhaus</span></code> algorithm is used by
+default but the main weakness is that LLL-based techniques are not implemented
+(so worst case is not polynomial time). For everyone else the algorithms used
+here are usually good but for certain inputs <code class="docutils literal notranslate"><span class="pre">factor</span></code> can be very slow when a
+different algorithm would be a lot faster.</p>
+<p>The main point of this factorisation example is just to show the significance
+of all the different domains including <code class="docutils literal notranslate"><span class="pre">GF(p)</span></code>. Most SymPy users do not care
+about <code class="docutils literal notranslate"><span class="pre">GF(p)</span></code> but it is crucial for things that they do care about because it
+is used by e.g. <code class="docutils literal notranslate"><span class="pre">factor</span></code> which is in turn used by <code class="docutils literal notranslate"><span class="pre">solve</span></code> and <code class="docutils literal notranslate"><span class="pre">simplify</span></code>
+and so on.</p>
+</section>
+<section id="algebraic-number-fields">
+<h2>Algebraic number fields<a class="headerlink" href="#algebraic-number-fields" title="Link to this heading">¶</a></h2>
+<p>In this example we get <code class="docutils literal notranslate"><span class="pre">EX</span></code> which is what <code class="docutils literal notranslate"><span class="pre">construct_domain</span></code> returns when
+it gives up:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">construct_domain</span><span class="p">([</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="mi">1</span><span class="p">])</span>
+<span class="go">(EX, [EX(sqrt(2)), EX(1)])</span>
+</pre></div>
+</div>
+<p>There is a domain for this but it will not be used by default (we have to pass
+<code class="docutils literal notranslate"><span class="pre">extension=True</span></code>):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">construct_domain</span><span class="p">([</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="mi">1</span><span class="p">],</span> <span class="n">extension</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="go">(QQ&lt;sqrt(2)&gt;, [ANP([mpq(1,1), mpq(0,1)], [mpq(1,1), mpq(0,1), mpq(-2,1)], QQ), ANP([mpq(1,1)], [mpq(1,1), mpq(0,1), mpq(-2,1)], QQ)])</span>
+</pre></div>
+</div>
+<p>It might not look nice but that is the domain for the algebraic number field
+<span class="math notranslate nohighlight">\(\mathbb{Q}(\sqrt{2})\)</span>. The <code class="docutils literal notranslate"><span class="pre">ANP</span></code> stands for “algebraic number
+polynomial”. The representation of algebraic number fields always uses a
+<em>primitive element</em>. This representation is efficient for arithmetic but
+computing the primitive element can be expensive which means that it can be
+slow to construct the domain. Timings are (on a slow computer):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">In</span> <span class="p">[</span><span class="mi">10</span><span class="p">]:</span> <span class="o">%</span><span class="n">time</span> <span class="n">ok</span> <span class="o">=</span> <span class="n">construct_domain</span><span class="p">([</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">)],</span> <span class="n">extension</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">CPU</span> <span class="n">times</span><span class="p">:</span> <span class="n">user</span> <span class="mi">26</span> <span class="n">ms</span><span class="p">,</span> <span class="n">sys</span><span class="p">:</span> <span class="mi">0</span> <span class="n">ns</span><span class="p">,</span> <span class="n">total</span><span class="p">:</span> <span class="mi">26</span> <span class="n">ms</span>
+<span class="n">Wall</span> <span class="n">time</span><span class="p">:</span> <span class="mf">25.2</span> <span class="n">ms</span>
+
+<span class="n">In</span> <span class="p">[</span><span class="mi">11</span><span class="p">]:</span> <span class="o">%</span><span class="n">time</span> <span class="n">ok</span> <span class="o">=</span> <span class="n">construct_domain</span><span class="p">([</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">sqrt</span><span class="p">(</span><span class="mi">3</span><span class="p">)],</span> <span class="n">extension</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">CPU</span> <span class="n">times</span><span class="p">:</span> <span class="n">user</span> <span class="mf">47.4</span> <span class="n">ms</span><span class="p">,</span> <span class="n">sys</span><span class="p">:</span> <span class="mi">0</span> <span class="n">ns</span><span class="p">,</span> <span class="n">total</span><span class="p">:</span> <span class="mf">47.4</span> <span class="n">ms</span>
+<span class="n">Wall</span> <span class="n">time</span><span class="p">:</span> <span class="mf">46.3</span> <span class="n">ms</span>
+
+<span class="n">In</span> <span class="p">[</span><span class="mi">12</span><span class="p">]:</span> <span class="o">%</span><span class="n">time</span> <span class="n">ok</span> <span class="o">=</span> <span class="n">construct_domain</span><span class="p">([</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">sqrt</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">sqrt</span><span class="p">(</span><span class="mi">5</span><span class="p">)],</span> <span class="n">extension</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">CPU</span> <span class="n">times</span><span class="p">:</span> <span class="n">user</span> <span class="mf">55.2</span> <span class="n">ms</span><span class="p">,</span> <span class="n">sys</span><span class="p">:</span> <span class="mi">0</span> <span class="n">ns</span><span class="p">,</span> <span class="n">total</span><span class="p">:</span> <span class="mf">55.2</span> <span class="n">ms</span>
+<span class="n">Wall</span> <span class="n">time</span><span class="p">:</span> <span class="mf">53.9</span> <span class="n">ms</span>
+
+<span class="n">In</span> <span class="p">[</span><span class="mi">13</span><span class="p">]:</span> <span class="o">%</span><span class="n">time</span> <span class="n">ok</span> <span class="o">=</span> <span class="n">construct_domain</span><span class="p">([</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">sqrt</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">sqrt</span><span class="p">(</span><span class="mi">5</span><span class="p">),</span> <span class="n">sqrt</span><span class="p">(</span><span class="mi">7</span><span class="p">)],</span> <span class="n">extension</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">CPU</span> <span class="n">times</span><span class="p">:</span> <span class="n">user</span> <span class="mi">120</span> <span class="n">ms</span><span class="p">,</span> <span class="n">sys</span><span class="p">:</span> <span class="mi">0</span> <span class="n">ns</span><span class="p">,</span> <span class="n">total</span><span class="p">:</span> <span class="mi">120</span> <span class="n">ms</span>
+<span class="n">Wall</span> <span class="n">time</span><span class="p">:</span> <span class="mi">118</span> <span class="n">ms</span>
+
+<span class="n">In</span> <span class="p">[</span><span class="mi">14</span><span class="p">]:</span> <span class="o">%</span><span class="n">time</span> <span class="n">ok</span> <span class="o">=</span> <span class="n">construct_domain</span><span class="p">([</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">sqrt</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">sqrt</span><span class="p">(</span><span class="mi">5</span><span class="p">),</span> <span class="n">sqrt</span><span class="p">(</span><span class="mi">7</span><span class="p">),</span> <span class="n">sqrt</span><span class="p">(</span><span class="mi">11</span><span class="p">)],</span> <span class="n">extension</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">CPU</span> <span class="n">times</span><span class="p">:</span> <span class="n">user</span> <span class="mi">688</span> <span class="n">ms</span><span class="p">,</span> <span class="n">sys</span><span class="p">:</span> <span class="mi">0</span> <span class="n">ns</span><span class="p">,</span> <span class="n">total</span><span class="p">:</span> <span class="mi">688</span> <span class="n">ms</span>
+<span class="n">Wall</span> <span class="n">time</span><span class="p">:</span> <span class="mi">686</span> <span class="n">ms</span>
+
+<span class="n">In</span> <span class="p">[</span><span class="mi">15</span><span class="p">]:</span> <span class="o">%</span><span class="n">time</span> <span class="n">ok</span> <span class="o">=</span> <span class="n">construct_domain</span><span class="p">([</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">sqrt</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">sqrt</span><span class="p">(</span><span class="mi">5</span><span class="p">),</span> <span class="n">sqrt</span><span class="p">(</span><span class="mi">7</span><span class="p">),</span> <span class="n">sqrt</span><span class="p">(</span><span class="mi">11</span><span class="p">),</span> <span class="n">sqrt</span><span class="p">(</span><span class="mi">13</span><span class="p">)],</span> <span class="n">extens</span>
+    <span class="o">...</span><span class="p">:</span> <span class="n">ion</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="o">^</span><span class="n">C</span><span class="o">^</span><span class="n">C</span>
+<span class="ne">KeyboardInterrupt</span>
+</pre></div>
+</div>
+<p>I don’t know how long that last command would take but I interrupted it after
+about 5 minutes. I have not investigated why it is so slow but I expect that it
+can be made faster. I think what it really shows though is that it is a bad
+idea to even try to compute the primitive element and that it is better to
+represent algebraic number fields differently in the case of having many
+algebraic generators.</p>
+</section>
+<section id="ex-and-exraw-domains">
+<h2>EX and EXRAW domains<a class="headerlink" href="#ex-and-exraw-domains" title="Link to this heading">¶</a></h2>
+<p>There are more domains than listed above but those are the ones that would
+usually be created automatically within SymPy when the computational algebra
+subsystem is used implicitly. There will always be some situations where the
+symbolic subsystem has some expressions that the computational algebra
+subsystem cannot represent using a standard ring/field from the list above. In
+those situations it will use the <code class="docutils literal notranslate"><span class="pre">EX</span></code> or <code class="docutils literal notranslate"><span class="pre">EXRAW</span></code> domains. In these domains
+the elements are actually just symbolic expressions from the symbolic
+subsystem. This provides an escape hatch that allows code that expects to work
+with the domains to fall back on using the symbolic subsystem when a more
+structured domain cannot be found.</p>
+<p>The difference between the <code class="docutils literal notranslate"><span class="pre">EX</span></code> and <code class="docutils literal notranslate"><span class="pre">EXRAW</span></code> domains is that the elements of
+the <code class="docutils literal notranslate"><span class="pre">EX</span></code> domain are always simplified using the high-level <code class="docutils literal notranslate"><span class="pre">cancel</span></code>
+function so in this domain <code class="docutils literal notranslate"><span class="pre">c</span> <span class="pre">=</span> <span class="pre">b</span> <span class="pre">+</span> <span class="pre">a</span></code> is equivalent to writing <code class="docutils literal notranslate"><span class="pre">c</span> <span class="pre">=</span>
+<span class="pre">cancel(b</span> <span class="pre">+</span> <span class="pre">a)</span></code> with ordinary SymPy expressions from the symbolic subsystem.
+The effect of <code class="docutils literal notranslate"><span class="pre">cancel</span></code> on a symbolic expression is that always rearranges an
+expression into a ratio of expanded polynomials and then cancels the polynomial
+gcd of the numerator and denominator:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="n">symbols</span><span class="p">,</span> <span class="n">cancel</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">symbols</span><span class="p">(</span><span class="s1">&#39;x, y&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">e</span> <span class="o">=</span> <span class="mi">1</span><span class="o">/</span><span class="n">x</span> <span class="o">+</span> <span class="n">x</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">e</span>
+<span class="go">x + 1/x</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">cancel</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+<span class="go">(x**2 + 1)/x</span>
+</pre></div>
+</div>
+<p>Calling <code class="docutils literal notranslate"><span class="pre">cancel</span></code> on symbolic expressions like this is slow because every call
+to to <code class="docutils literal notranslate"><span class="pre">cancel</span></code> has to go through the whole process of identifying a
+polynomial representation, choosing a domain, converting the expressions into
+the domain and then after actually computing the cancelled fraction the result
+needs to be convert back to the symbolic subsystem. If this sort of
+simplification is wanted then it is always better to use any of the more
+structured domains above than to use <code class="docutils literal notranslate"><span class="pre">EX</span></code> because it avoids all the cost of
+these conversions.</p>
+<p>For some algorithms the automatic expansion and cancellation used in <code class="docutils literal notranslate"><span class="pre">EX</span></code> is
+exactly what is needed as a method of intermediate simplification to speed up a
+large calculation and return a result in a mostly canonical form. In some
+situations though it is preferrable not to have this cancellation (which in
+itself can be slow) and for this the <code class="docutils literal notranslate"><span class="pre">EXRAW</span></code> domain is provided. Operations
+with the <code class="docutils literal notranslate"><span class="pre">EXRAW</span></code> domain are precisely equivalent to operations in the
+symbolic subsystem (without calling <code class="docutils literal notranslate"><span class="pre">cancel</span></code>). All the reasons that it is
+difficult to build heavy algorithms over the symbolic subsystem apply to the
+<code class="docutils literal notranslate"><span class="pre">EXRAW</span></code> domain as well. The <code class="docutils literal notranslate"><span class="pre">EXRAW</span></code> domain is only really useful for
+preserving existing behaviour in a situation where we want to change code that
+currently uses the symbolic system to use the computational algebra subsystem
+instead. It would almost always be better to use something other than <code class="docutils literal notranslate"><span class="pre">EXRAW</span></code>
+(even if just <code class="docutils literal notranslate"><span class="pre">EX</span></code>) but if we want to be conservative when making changes
+then <code class="docutils literal notranslate"><span class="pre">EXRAW</span></code> provides a possible compatibility mechanism.</p>
+</section>
+<section id="using-the-right-domains">
+<h2>Using the right domains<a class="headerlink" href="#using-the-right-domains" title="Link to this heading">¶</a></h2>
+<p>Having talked a lot about the domain system above I can now explain how that
+relates to things sometimes being slow in SymPy and what can be done to improve
+that.</p>
+<p>Firstly, when implementing any arithmetic heavy algorithm like solving a
+system of linear equations all of the domains described above apart from <code class="docutils literal notranslate"><span class="pre">EX</span></code>
+or <code class="docutils literal notranslate"><span class="pre">EXRAW</span></code> are almost always faster than any algorithm that could be
+implemented directly with symbolic expressions. The number one reason for
+slowness in things like computing the inverse of a matrix is just the fact that
+many such algorithms do not use the domain system at all and instead use the
+symbolic subsystem.</p>
+<p>Secondly, in many cases the <code class="docutils literal notranslate"><span class="pre">EX</span></code> domain is used when it would not be
+difficult to choose a better domain instead. This is because the mechanism for
+constructing domains is quite conservative about what it will accept. An
+example would be:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">symbols</span><span class="p">(</span><span class="s1">&#39;x, y&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">construct_domain</span><span class="p">([</span><span class="n">x</span> <span class="o">+</span> <span class="n">y</span><span class="p">])</span>
+<span class="go">(ZZ[x,y], [x + y])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">t</span> <span class="o">=</span> <span class="n">symbols</span><span class="p">(</span><span class="s1">&#39;t&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">x</span> <span class="o">=</span> <span class="n">Function</span><span class="p">(</span><span class="s1">&#39;x&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">y</span> <span class="o">=</span> <span class="n">Function</span><span class="p">(</span><span class="s1">&#39;y&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">construct_domain</span><span class="p">([</span><span class="n">x</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="o">+</span> <span class="n">y</span><span class="p">(</span><span class="n">t</span><span class="p">)])</span>
+<span class="go">(EX, [EX(x(t) + y(t))])</span>
+</pre></div>
+</div>
+<p>Here the functions <code class="docutils literal notranslate"><span class="pre">x(t)</span></code> and <code class="docutils literal notranslate"><span class="pre">y(t)</span></code> should be treated the same as the
+symbols <code class="docutils literal notranslate"><span class="pre">x</span></code> and <code class="docutils literal notranslate"><span class="pre">y</span></code> were. A suitable domain can easily be created
+explicitly:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">domain</span> <span class="o">=</span> <span class="n">ZZ</span><span class="p">[</span><span class="n">x</span><span class="p">(</span><span class="n">t</span><span class="p">),</span><span class="n">y</span><span class="p">(</span><span class="n">t</span><span class="p">)]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">domain</span><span class="o">.</span><span class="n">from_sympy</span><span class="p">(</span><span class="n">x</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="o">+</span> <span class="n">y</span><span class="p">(</span><span class="n">t</span><span class="p">))</span>
+<span class="go">(x(t)) + (y(t))</span>
+</pre></div>
+</div>
+<p>The problem here is just that the code inside <code class="docutils literal notranslate"><span class="pre">construct_domain</span></code> rejects this
+domain because it does not want to create a polynomial ring where the
+generators have free symbols in common (the <code class="docutils literal notranslate"><span class="pre">t</span></code> in this case). The reason for
+rejecting this is to try to avoid something like this:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">ZZ</span><span class="p">[</span><span class="n">sin</span><span class="p">(</span><span class="n">t</span><span class="p">),</span><span class="n">cos</span><span class="p">(</span><span class="n">t</span><span class="p">)]</span>
+<span class="go">ZZ[sin(t),cos(t)]</span>
+</pre></div>
+</div>
+<p>This <code class="docutils literal notranslate"><span class="pre">ZZ[sin(t),cos(t)]</span></code> domain is invalid for many situations. the problem
+with it is that it is possible to create an expression that should really be
+zero but appears not to be zero:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">R</span> <span class="o">=</span> <span class="n">ZZ</span><span class="p">[</span><span class="n">sin</span><span class="p">(</span><span class="n">t</span><span class="p">),</span><span class="n">cos</span><span class="p">(</span><span class="n">t</span><span class="p">)]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">s</span> <span class="o">=</span> <span class="n">R</span><span class="o">.</span><span class="n">from_sympy</span><span class="p">(</span><span class="n">sin</span><span class="p">(</span><span class="n">t</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">c</span> <span class="o">=</span> <span class="n">R</span><span class="o">.</span><span class="n">from_sympy</span><span class="p">(</span><span class="n">cos</span><span class="p">(</span><span class="n">t</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">e</span> <span class="o">=</span> <span class="n">s</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">c</span><span class="o">**</span><span class="mi">2</span> <span class="o">-</span> <span class="mi">1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">e</span>
+<span class="go">(sin(t))**2 + (cos(t))**2 - 1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">R</span><span class="o">.</span><span class="n">is_zero</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+<span class="go">False</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">R</span><span class="o">.</span><span class="n">to_sympy</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="o">.</span><span class="n">trigsimp</span><span class="p">()</span>
+<span class="go">0</span>
+</pre></div>
+</div>
+<p>One of the reasons that arithmetic heavy algorithms with domains are so much
+faster than with symbolic expressions is because in the domain system any
+expression that is equal to zero should be simplified automatically to zero.
+Many algorithms need to know whether expressions are zero or not so this is an
+extremely useful property. Just treating <code class="docutils literal notranslate"><span class="pre">sin(t)</span></code> and <code class="docutils literal notranslate"><span class="pre">cos(t)</span></code> as
+independent variables in a polynomial ring violates this property. Sometimes
+that would be fine but in other situations it could lead to bugs. Therefore
+<code class="docutils literal notranslate"><span class="pre">construct_domain</span></code> refuses to create the ring <code class="docutils literal notranslate"><span class="pre">ZZ[sin(t),cos(t)]</span></code> to avoid
+bugs. This refusal leads to the <code class="docutils literal notranslate"><span class="pre">EX</span></code> domain being used which is much slower
+and also potentially subject to precisely the same bugs. The advantage of using
+the <code class="docutils literal notranslate"><span class="pre">EX</span></code> domain here is mainly just that other code can at least be aware
+that the domain is not well defined and can then handle things more
+conservatively.</p>
+<p>It is perfectly possible to implement a domain that can represent a ring/field
+involving both <code class="docutils literal notranslate"><span class="pre">sin(t)</span></code> and <code class="docutils literal notranslate"><span class="pre">cos(t)</span></code>. There are already some kinds of
+domains that can do this although they are not used by default and also are not
+quite right for what is needed. What we really want is to be able to make a
+more complicated ring like this:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">QQ</span><span class="p">[</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span><span class="n">m1</span><span class="p">,</span><span class="n">m2</span><span class="p">,</span><span class="n">k1</span><span class="p">,</span><span class="n">k2</span><span class="p">,</span><span class="n">sin</span><span class="p">(</span><span class="n">theta</span><span class="p">),</span><span class="n">cos</span><span class="p">(</span><span class="n">theta</span><span class="p">),</span><span class="n">sin</span><span class="p">(</span><span class="n">phi</span><span class="p">),</span><span class="n">cos</span><span class="p">(</span><span class="n">phi</span><span class="p">)]</span>
+</pre></div>
+</div>
+<p>In science and engineering the need to work with <code class="docutils literal notranslate"><span class="pre">sin</span></code> and <code class="docutils literal notranslate"><span class="pre">cos</span></code> is very
+common so specialised domains are needed that can handle this for many
+different variables and can recognise trig identities etc. SymPy does not yet
+have this but adding it would mostly complete the domain system in terms of
+being able to represent the sorts of expressions that users typically want to
+work with. This would be particularly beneficial for example in the case of
+symbolic calculations in mechanics (as in the <code class="docutils literal notranslate"><span class="pre">sympy.physics.mechanics</span></code>
+module) because those calculations involve many systems of linear equations
+with <code class="docutils literal notranslate"><span class="pre">sin</span></code> and <code class="docutils literal notranslate"><span class="pre">cos</span></code> in the coefficients. I have an implementation of a
+domain that could represent the ring above using sparse polynomials and
+Groebner bases but it is still incomplete.</p>
+<p>There are then two common ways that things might become slower than they should
+be when using the domain system:</p>
+<ul class="simple">
+<li><p>Sometimes the <code class="docutils literal notranslate"><span class="pre">EX</span></code> domain is used conservatively when suitable
+alternative domains are already there and could easily be used.</p></li>
+<li><p>Sometimes a suitable domain is not yet implemented (e.g. <code class="docutils literal notranslate"><span class="pre">sin/cos</span></code>).</p></li>
+</ul>
+<p>In either case the result is that a calculation ends up using the <code class="docutils literal notranslate"><span class="pre">EX</span></code> domain
+which is a lot slower than any of the other domains. The fixes for thes
+problems are simple:</p>
+<ul class="simple">
+<li><p>Improve the logic for deciding which domains are used by default.</p></li>
+<li><p>Add new domains that can represent things like <code class="docutils literal notranslate"><span class="pre">sin</span></code> and <code class="docutils literal notranslate"><span class="pre">cos</span></code> for
+example.</p></li>
+</ul>
+<p>The other common problem is that constructing algebraic fields can be extremely
+slow (as shown above). This is unfortunate because after construction algebraic
+fields are much faster than alternate representations for the same expressions.
+The fix here is to use a different representation for algebraic fields that is
+not based on primitive elements but this is not a trivial change.</p>
+<p>Most of these changes are not particularly difficult to make but in each case
+the impact of making such a change can be far reaching and hard to predict in
+full. Each time some calculation is moved from either the symbolic subsystem or
+the <code class="docutils literal notranslate"><span class="pre">EX</span></code> domain to a more structured domain the most noticeable effect is to
+make things (much) faster, and a secondary effect is that it potentially
+reduces bugs. The third effect is that it leads to the output of the
+calculation being in a “more canonical” form which is a good thing but it is a
+change in output in some sense and it is the impact of this change that is hard
+to predict. Once a calculation is moved to use a more structured domain though
+it then becomes much easier to optimise things in future because the form of
+the output is much more predictable and can be preserved exactly under any
+change of algorithm.</p>
+</section>
+<section id="the-poly-system">
+<h2>The Poly system<a class="headerlink" href="#the-poly-system" title="Link to this heading">¶</a></h2>
+<p>The domain system is from a user-interface perspective the lowest level of the
+computational algebra subsystem. The next level up are the low-level poly
+functions for the <code class="docutils literal notranslate"><span class="pre">dup</span></code> (dense univariate polynomial) and <code class="docutils literal notranslate"><span class="pre">dmp</span></code> (dense
+multivariate polynomial) representations. In the <code class="docutils literal notranslate"><span class="pre">dup</span></code> representation a
+polynomial is represented as a list of coefficients. There are many functions
+with the <code class="docutils literal notranslate"><span class="pre">dup_</span></code> prefix for operating on this representation e.g. this is how
+you would multiply two polynomial using the symbolic system:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="n">symbols</span><span class="p">,</span> <span class="n">expand</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">x</span> <span class="o">=</span> <span class="n">symbols</span><span class="p">(</span><span class="s1">&#39;x&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">p1</span> <span class="o">=</span> <span class="mi">3</span><span class="o">*</span><span class="n">x</span> <span class="o">+</span> <span class="mi">4</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">p2</span> <span class="o">=</span> <span class="mi">5</span><span class="o">*</span><span class="n">x</span> <span class="o">+</span> <span class="mi">6</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">p3</span> <span class="o">=</span> <span class="n">expand</span><span class="p">(</span><span class="n">p1</span><span class="o">*</span><span class="n">p2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">p3</span>
+<span class="go">15*x**2 + 38*x + 24</span>
+</pre></div>
+</div>
+<p>This is how you would do the same with <code class="docutils literal notranslate"><span class="pre">dup_mul</span></code>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="n">ZZ</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy.polys.densearith</span> <span class="kn">import</span> <span class="n">dup_mul</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">p1</span> <span class="o">=</span> <span class="p">[</span><span class="n">ZZ</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">ZZ</span><span class="p">(</span><span class="mi">4</span><span class="p">)]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">p2</span> <span class="o">=</span> <span class="p">[</span><span class="n">ZZ</span><span class="p">(</span><span class="mi">5</span><span class="p">),</span> <span class="n">ZZ</span><span class="p">(</span><span class="mi">6</span><span class="p">)]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">p3</span> <span class="o">=</span> <span class="n">dup_mul</span><span class="p">(</span><span class="n">p1</span><span class="p">,</span> <span class="n">p2</span><span class="p">,</span> <span class="n">ZZ</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">p3</span>
+<span class="go">[mpz(15), mpz(38), mpz(24)]</span>
+</pre></div>
+</div>
+<p>A multivariate polynomial involving e.g. two symbols <code class="docutils literal notranslate"><span class="pre">x</span></code> and <code class="docutils literal notranslate"><span class="pre">y</span></code> can be
+thought of as a polynomial whose coefficients are polynomials e.g.:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">symbols</span><span class="p">(</span><span class="s1">&#39;x, y&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">p</span> <span class="o">=</span> <span class="n">x</span><span class="o">**</span><span class="mi">2</span><span class="o">*</span><span class="n">y</span> <span class="o">+</span> <span class="n">x</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">x</span><span class="o">*</span><span class="n">y</span><span class="o">**</span><span class="mi">2</span> <span class="o">-</span> <span class="n">x</span> <span class="o">-</span> <span class="n">y</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">p</span><span class="o">.</span><span class="n">collect</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<span class="go">x**2*(y + 1) + x*(y**2 - 1) - y</span>
+</pre></div>
+</div>
+<p>Here we could think of <code class="docutils literal notranslate"><span class="pre">p</span></code> as a polynomial in <code class="docutils literal notranslate"><span class="pre">x</span></code> whose coefficients are
+polynomials in <code class="docutils literal notranslate"><span class="pre">y</span></code>. If a univariate polynomial is represented as a list of
+coefficients then a multivariate polynomial can be represented as a list of
+lists of coefficients. This is the <code class="docutils literal notranslate"><span class="pre">dmp</span></code> representation:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">p</span><span class="o">.</span><span class="n">as_poly</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span><span class="o">.</span><span class="n">rep</span><span class="o">.</span><span class="n">rep</span>
+<span class="go">[[mpz(1), mpz(1)], [mpz(1), mpz(0), mpz(-1)], [mpz(-1), mpz(0)]]</span>
+</pre></div>
+</div>
+<p>There are many functions like <code class="docutils literal notranslate"><span class="pre">dmp_mul</span></code> etc for operating on this
+representation. In a simple example like this it looks okay but actually it is
+a very bad idea to use this list of lists (of lists of …) representation when
+we have many more than two variables:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">x0</span><span class="p">,</span> <span class="n">x1</span><span class="p">,</span> <span class="n">x2</span><span class="p">,</span> <span class="n">x3</span><span class="p">,</span> <span class="n">x4</span><span class="p">,</span> <span class="n">x5</span><span class="p">,</span> <span class="n">x6</span><span class="p">,</span> <span class="n">x7</span><span class="p">,</span> <span class="n">x8</span><span class="p">,</span> <span class="n">x9</span> <span class="o">=</span> <span class="n">syms</span> <span class="o">=</span> <span class="n">symbols</span><span class="p">(</span><span class="s1">&#39;x:10&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">p</span> <span class="o">=</span> <span class="n">x0</span><span class="o">*</span><span class="n">x9</span> <span class="o">-</span> <span class="n">x5</span><span class="o">*</span><span class="n">x3</span> <span class="o">+</span> <span class="n">x6</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">p</span><span class="o">.</span><span class="n">as_poly</span><span class="p">(</span><span class="n">syms</span><span class="p">)</span><span class="o">.</span><span class="n">rep</span><span class="o">.</span><span class="n">rep</span>
+<span class="go">[[[[[[[[[[mpz(1), mpz(0)]]]]]]]]], [[[[[[[[[mpz(-1)]]]], [[[[]]]]]], [[[[[[mpz(1)]]], [[[]]]]]]]]]]</span>
+</pre></div>
+</div>
+<p>These deeply nested recursive lists are very inefficient to work with compared
+to the flatter sparse representation which in this case looks like:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nb">dict</span><span class="p">(</span><span class="n">ZZ</span><span class="p">[</span><span class="n">syms</span><span class="p">]</span><span class="o">.</span><span class="n">from_sympy</span><span class="p">(</span><span class="n">p</span><span class="p">))</span>
+<span class="go">{(0, 0, 0, 0, 0, 0, 1, 0, 0, 0): mpz(1), (1, 0, 0, 0, 0, 0, 0, 0, 0, 1): mpz(1), (0, 0, 0, 1, 0, 1, 0, 0, 0, 0): mpz(-1)}</span>
+</pre></div>
+</div>
+<p>Altogether there are about 500 <code class="docutils literal notranslate"><span class="pre">dup_*</span></code> and <code class="docutils literal notranslate"><span class="pre">dmp_*</span></code> functions. These
+collectively implement just about all of the operations and algorithms that you
+might want for doing anything with polynomials and there are in many cases
+multiple algorithms for the same operation. It is clear from the design of
+these that the intention was at some point to rewrite all of this code in C to
+speed things up.</p>
+<p>The next level up are the polynomial classes like the <code class="docutils literal notranslate"><span class="pre">DMP</span></code> class. The
+<code class="docutils literal notranslate"><span class="pre">DMP</span></code> class wraps up a list of lists in the representation shown above along
+with a reference to the associated domain. The <code class="docutils literal notranslate"><span class="pre">DMP</span></code> class then provides
+around 150 methods that are implemented by calling down to the lower-level
+routines.</p>
+<p>The next level above that is <code class="docutils literal notranslate"><span class="pre">Poly</span></code> which is the main user-facing class for
+polynomials. The <code class="docutils literal notranslate"><span class="pre">Poly</span></code> class is a wrapper around the <code class="docutils literal notranslate"><span class="pre">DMP</span></code> class that
+provides a lot of convenience methods for doing things like converting to and
+from the symbolic subsystem, and other representations.</p>
+<p>These levels <code class="docutils literal notranslate"><span class="pre">Poly</span></code>, <code class="docutils literal notranslate"><span class="pre">DMP</span></code> and the <code class="docutils literal notranslate"><span class="pre">dup</span></code> representation can be seen by
+creating a <code class="docutils literal notranslate"><span class="pre">Poly</span></code> and then looking at its <code class="docutils literal notranslate"><span class="pre">rep</span></code> attribute:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">p</span> <span class="o">=</span> <span class="n">Poly</span><span class="p">(</span><span class="n">x</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">p</span>          <span class="c1"># Poly</span>
+<span class="go">Poly(x**2 + 1, x, domain=&#39;ZZ&#39;)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">p</span><span class="o">.</span><span class="n">rep</span>      <span class="c1"># DMP</span>
+<span class="go">DMP([1, 0, 1], ZZ, None)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">p</span><span class="o">.</span><span class="n">rep</span><span class="o">.</span><span class="n">rep</span>  <span class="c1"># dup</span>
+<span class="go">[1, 0, 1]</span>
+</pre></div>
+</div>
+<p>The final level are the “polys” functions like <code class="docutils literal notranslate"><span class="pre">factor</span></code>. These are the
+highest level functions that are used by most SymPy users and can operate on
+expressions from the symbolic subsystem:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">sympy</span> <span class="kn">import</span> <span class="n">factor</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">factor</span><span class="p">(</span><span class="n">x</span><span class="o">**</span><span class="mi">2</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+<span class="go">(x - 1)*(x + 1)</span>
+</pre></div>
+</div>
+<p>The levels altogether then are:</p>
+<ol class="arabic simple">
+<li><p>Domains (e.g. <code class="docutils literal notranslate"><span class="pre">ZZ</span></code>, <code class="docutils literal notranslate"><span class="pre">QQ</span></code>, <code class="docutils literal notranslate"><span class="pre">ZZ[x]</span></code>, <code class="docutils literal notranslate"><span class="pre">QQ[x]</span></code> etc)</p></li>
+<li><p>Low-level poly functions (e.g. <code class="docutils literal notranslate"><span class="pre">dup_mul</span></code>, <code class="docutils literal notranslate"><span class="pre">dmp_mul</span></code> etc)</p></li>
+<li><p>Polynomial classes (e.g. <code class="docutils literal notranslate"><span class="pre">DMP</span></code>)</p></li>
+<li><p>High-level <code class="docutils literal notranslate"><span class="pre">Poly</span></code> class.</p></li>
+<li><p>Polynomial functions for symbolic expressions (e.g. <code class="docutils literal notranslate"><span class="pre">factor</span></code>)</p></li>
+</ol>
+<p>The intention was always that some of these levels would be replaced by more
+efficient implementations in C but it is not obvious at which level that was
+intended to happen. The <code class="docutils literal notranslate"><span class="pre">Poly</span></code> class is too high-level and interfaces a lot
+with the symbolic subsystem so it is not easy or desirable to rewrite that in
+C. The <code class="docutils literal notranslate"><span class="pre">dup_</span></code> and <code class="docutils literal notranslate"><span class="pre">dmp_</span></code> functions are closely tied to their own
+(suboptimal) data representations so without rewriting every single one of them
+it would not be possible to swap out this whole layer.</p>
+<p>There are two levels that are good candidates for swapping in alternate
+implementations wholesale then:</p>
+<ul class="simple">
+<li><p>The domain level</p></li>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">DMP</span></code> class</p></li>
+</ul>
+<p>At the domain level SymPy already swaps out the implementations of <code class="docutils literal notranslate"><span class="pre">ZZ</span></code> and
+<code class="docutils literal notranslate"><span class="pre">QQ</span></code> when gmpy2 is installed but the same could be done for all of the
+commonly used domains like <code class="docutils literal notranslate"><span class="pre">ZZ[x]</span></code>, <code class="docutils literal notranslate"><span class="pre">QQ[x]</span></code> etc if the implementations of
+these from e.g. python-flint were used. The <code class="docutils literal notranslate"><span class="pre">DMP</span></code> class is also a good
+candidate for swapping out just because it is nicely self-contained. A wrapper
+class could be made like <code class="docutils literal notranslate"><span class="pre">FlintDMP</span></code> that wraps a polynomial type from
+python-flint and provides the same interface as <code class="docutils literal notranslate"><span class="pre">DMP</span></code> currently does. That
+would make it easy to swap in a faster implementation of the <code class="docutils literal notranslate"><span class="pre">DMP</span></code> class
+when python-flint is installed.</p>
+<p>Besides swapping out a whole layer the easiest way to make some things faster
+would just be to swap out a few key functions that involve expensive algorithms
+e.g. like <code class="docutils literal notranslate"><span class="pre">dup_zz_factor</span></code> or <code class="docutils literal notranslate"><span class="pre">dmp_zz_factor</span></code> which are the base functions
+for factorising univariate ot multivariate polynomials in <code class="docutils literal notranslate"><span class="pre">ZZ[x]</span></code> or
+<code class="docutils literal notranslate"><span class="pre">ZZ[x,y,...]</span></code> respectively. Swapping out a single function like this is
+suboptimal because it implies potentially costly conversions from a more
+efficient C representation to e.g. the inefficient <code class="docutils literal notranslate"><span class="pre">DMP</span></code> representation but
+it would be a very simple change to make and could immediately bring big speed
+ups for important operations.</p>
+</section>
+<section id="sparse-polynomials">
+<h2>Sparse polynomials<a class="headerlink" href="#sparse-polynomials" title="Link to this heading">¶</a></h2>
+<p>The system of levels in the polys module that I described above is all nicely
+designed and mostly well implemented. There are some algorithms that would be
+nice to have like asymptotically fast multiplication and division of
+polynomials but mostly it has the pieces and algorithms that are needed. The
+big glaring problem with it though is that it is all based on dense polynomials
+and the <code class="docutils literal notranslate"><span class="pre">DMP</span></code> representation. This is very inefficient for polynomials with
+many variables. The system works nicely for univariate polynomials but many of
+the algorithms necessarily become inefficient for multivariate polynomials.
+Most SymPy users are not really interested in using only univariate polynomials
+(e.g. solving equations with only one symbol or something) so this is a
+significant limitation.</p>
+<p>At some point the mistake of basing everything on dense polynomials was
+realised and a new class <code class="docutils literal notranslate"><span class="pre">PolyElement</span></code> implementing sparse polynomials was
+added. The implementation of <code class="docutils literal notranslate"><span class="pre">PolyElement</span></code> is mostly complete and it is used
+in many places but not always. For example the domain system always uses
+(sparse) <code class="docutils literal notranslate"><span class="pre">PolyElement</span></code> but the <code class="docutils literal notranslate"><span class="pre">Poly</span></code> class always uses (dense) <code class="docutils literal notranslate"><span class="pre">DMP</span></code>.</p>
+<p>It would be possible to add an equivalent of the <code class="docutils literal notranslate"><span class="pre">DMP</span></code> class based on sparse
+polynomials that <code class="docutils literal notranslate"><span class="pre">Poly</span></code> could use internally. It is not clear if it was
+intended that <code class="docutils literal notranslate"><span class="pre">PolyElement</span></code> would be that class or if another level was
+expected. Looking at the code right now the easiest thing would be to add a new
+class in between <code class="docutils literal notranslate"><span class="pre">PolyElement</span></code> and <code class="docutils literal notranslate"><span class="pre">Poly</span></code> that implements the same
+interface as <code class="docutils literal notranslate"><span class="pre">DMP</span></code> but using sparse polynomials internally, let’s call it
+<code class="docutils literal notranslate"><span class="pre">SMP</span></code>. Then <code class="docutils literal notranslate"><span class="pre">Poly</span></code> could use <code class="docutils literal notranslate"><span class="pre">DMP</span></code> or <code class="docutils literal notranslate"><span class="pre">SMP</span></code> internally but <code class="docutils literal notranslate"><span class="pre">DMP</span></code>
+would only ever be used for univariate polynomials. Then the structure would
+look like:</p>
+<ol class="arabic simple">
+<li><p>Domains (<code class="docutils literal notranslate"><span class="pre">ZZ</span></code> …)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dup_*</span></code> (dense) or <code class="docutils literal notranslate"><span class="pre">PolyElement</span></code> (sparse)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">DMP</span></code> (dense) or <code class="docutils literal notranslate"><span class="pre">SMP</span></code> (sparse)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Poly</span></code> (dense or sparse internally)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">factor</span></code> etc</p></li>
+</ol>
+<p>It is not completely clear if that is the right thing to do though because
+actually many <code class="docutils literal notranslate"><span class="pre">Poly</span></code> methods are designed tightly around what makes sense in
+the dense representation or around things that only make sense for univariate
+polynomials. Probably the interface of <code class="docutils literal notranslate"><span class="pre">Poly</span></code> and the signatures and
+behaviour of the methods and functions that operate on it would have been
+designed differently if sparse and multivariate polynomials had been considered
+from the start.</p>
+<p>In general it is not really clear to me if it even makes sense to have a
+generic interface that covers both univariate and multivariate polynomials
+because often the operations that make sense for one case do not make sense for
+the other. The fact that all of the low-level code needs to have completely
+separate functions for univariate (<code class="docutils literal notranslate"><span class="pre">dup_*</span></code>) and multivariate (<code class="docutils literal notranslate"><span class="pre">dmp_*</span></code>)
+polynomials shows that it is not really possible to write generic code that
+ignores this distinction.</p>
+<p>An alternate scheme for sparse multivariate polynomials could look like:</p>
+<ol class="arabic simple">
+<li><p>Domains</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">PolyElement</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">SPoly</span></code> (sparse version of <code class="docutils literal notranslate"><span class="pre">Poly</span></code>)</p></li>
+</ol>
+<p>Then depending on context you would choose whether you wanted to use <code class="docutils literal notranslate"><span class="pre">Poly</span></code>
+for univariate polynomials or <code class="docutils literal notranslate"><span class="pre">SPoly</span></code> for multivariate polynomials (perhaps
+<code class="docutils literal notranslate"><span class="pre">SPoly</span></code> should be called <code class="docutils literal notranslate"><span class="pre">MPoly</span></code> for “multivariate”). This approach would
+require more careful design because it would impact more on code that end users
+would potentially write rather than just being a rearrangement of internal
+code. We would need to decide what e.g. <code class="docutils literal notranslate"><span class="pre">expr.as_poly()</span></code> should return and
+changing that to <code class="docutils literal notranslate"><span class="pre">SPoly/MPoly</span></code> in some cases might not be backwards
+compatible so perhaps we need new methods like <code class="docutils literal notranslate"><span class="pre">expr.as_mpoly()</span></code>.</p>
+</section>
+<section id="polynomial-gcd">
+<h2>Polynomial GCD<a class="headerlink" href="#polynomial-gcd" title="Link to this heading">¶</a></h2>
+<p>Apart from actually making use of sparse polynomials in <code class="docutils literal notranslate"><span class="pre">Poly</span></code> (or <code class="docutils literal notranslate"><span class="pre">SPoly</span></code>)
+the implementation of sparse polynomials is mostly complete but the biggest
+weakness is the use of poor algorithms for polynomial gcd. The current
+implementation of polynomial gcd for <code class="docutils literal notranslate"><span class="pre">PolyElement</span></code> uses “heugcd” for <code class="docutils literal notranslate"><span class="pre">ZZ</span></code>
+or <code class="docutils literal notranslate"><span class="pre">QQ</span></code> or switches to the <code class="docutils literal notranslate"><span class="pre">DMP</span></code> representation and uses subresultant PRS
+for all other domains. This is bad for several reasons:</p>
+<ul class="simple">
+<li><p>The “heugcd” algorithm is often okay but can be much worse than other
+algorithms in some cases.</p></li>
+<li><p>Sometimes “heugcd” is “unlucky” and fails (the current code does not fall
+back to anything else in this case and just blows up instead).</p></li>
+<li><p>Switching from the sparse to the dense representation can be very inefficient
+for all the reasons that it is usually better to use a sparse representation
+in the first place (for multivariate polynomials).</p></li>
+<li><p>The subresultant PRS algorithm is not generally the best algorithm in many
+cases either.</p></li>
+</ul>
+<p>Ideally there would be a range of different algorithms for sparse polynomial
+gcd and the best one would be chosen based on sparsity, degree etc. It is not
+too hard to port the dense PRS algorithm to the sparse implementation but
+ultimately other algorithms should often be used. There is a whole module
+<code class="docutils literal notranslate"><span class="pre">sympy.polys.modulargcd</span></code> which has about 3000 lines of code implementing
+modular algorithms for gcd over many different domains including algebraic
+number fields. It looks like good code but is not used anywhere in SymPy and
+its status is unclear.</p>
+<p>Mostly I think that the main route to speeding up polynomial operations in
+SymPy is just by making use of python-flint but the pure Python implementation
+should at least use reasonable algorithms. The poor polynomial gcd algorithms
+are a major weakness that directly impacts high-level operations like
+<code class="docutils literal notranslate"><span class="pre">solve</span></code>, <code class="docutils literal notranslate"><span class="pre">integrate</span></code> etc. I will give two examples of how polynomial gcd
+can slow down other things. The first is computing the inverse of the matrix
+described in this issue:</p>
+<p><a class="reference external" href="https://github.com/sympy/sympy/issues/25403">https://github.com/sympy/sympy/issues/25403</a></p>
+<p>The matrix includes <code class="docutils literal notranslate"><span class="pre">I</span></code> (<span class="math notranslate nohighlight">\(\sqrt{-1}\)</span>) and so the domain of the elements
+of the matrix is something like <code class="docutils literal notranslate"><span class="pre">ZZ_I[a,b,c,...,g]</span></code> where <code class="docutils literal notranslate"><span class="pre">ZZ_I</span></code> means the
+Gaussian integers. The newly added fraction-free RREF algorithm for computing
+the inverse can compute the inverse of each component of the matrix in the form
+of a numerator matrix and scalar denominator relatively quickly e.g.:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">In</span> <span class="p">[</span><span class="mi">2</span><span class="p">]:</span> <span class="o">%</span><span class="n">time</span> <span class="n">Mnum</span><span class="p">,</span> <span class="n">den</span> <span class="o">=</span> <span class="n">M2parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">to_DM</span><span class="p">()</span><span class="o">.</span><span class="n">inv_den</span><span class="p">()</span>
+<span class="n">CPU</span> <span class="n">times</span><span class="p">:</span> <span class="n">user</span> <span class="mf">1.2</span> <span class="n">s</span><span class="p">,</span> <span class="n">sys</span><span class="p">:</span> <span class="mf">10.8</span> <span class="n">ms</span><span class="p">,</span> <span class="n">total</span><span class="p">:</span> <span class="mf">1.21</span> <span class="n">s</span>
+<span class="n">Wall</span> <span class="n">time</span><span class="p">:</span> <span class="mf">1.21</span> <span class="n">s</span>
+</pre></div>
+</div>
+<p>That takes 1 second which I think is still too slow but most users will
+tolerate waiting that long for something like this. We want to combine the
+numerator matrix and the denominator though which means dividing them and
+ideally the gcd should be cancelled to bring the inverse matrix into its
+simplest form:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">In</span> <span class="p">[</span><span class="mi">3</span><span class="p">]:</span> <span class="o">%</span><span class="n">time</span> <span class="n">Minv</span> <span class="o">=</span> <span class="n">Mnum</span><span class="o">.</span><span class="n">to_field</span><span class="p">()</span> <span class="o">/</span> <span class="n">den</span>
+<span class="o">^</span><span class="n">C</span><span class="o">^</span><span class="n">C</span>
+<span class="ne">KeyboardInterrupt</span>
+</pre></div>
+</div>
+<p>I interupted that after about 5 minutes so I’m not sure how long it actually
+would have taken. The slow part here is 25 polynomial gcd calculations. The
+polynomial expressions are moderately large but better algorithms could do this
+a lot faster. In this case because the domain of the polynomials is <code class="docutils literal notranslate"><span class="pre">ZZ_I</span></code>
+the dense PRS algorithm is used rather than <code class="docutils literal notranslate"><span class="pre">heugcd</span></code> and that is just very
+slow in this case. We can avoid the gcd calculations here but in other cases it
+is definitely better to cancel the gcd and it is awkward to have to work around
+some extremely slow cases by returning less simplified results in most other
+cases. This sort of consideration applies not just to matrix inverse but e.g.
+solving a system of linear equations so <code class="docutils literal notranslate"><span class="pre">solve</span></code>, <code class="docutils literal notranslate"><span class="pre">linsolve</span></code> etc and many
+other algorithms that use these operations internally (e.g. integration
+algorithms).</p>
+<p>Another example of slowness caused by polynomial gcd is in the “heurisch”
+integration algorithm. This algorithm has essentially three computational steps
+that take place in a loop:</p>
+<ul class="simple">
+<li><p>Differentiate some expression.</p></li>
+<li><p>Cancel a gcd between two polynomials.</p></li>
+<li><p>Solve a sparse system of linear equations.</p></li>
+</ul>
+<p>The system of linear equations is solved using the computational algebra
+subsystem (<code class="docutils literal notranslate"><span class="pre">DomainMatrix</span></code>). Theoretically the linear algebra should be the
+slow part but in SymPy it is not because the other operations are computed
+using the symbolic subsystem and end up being much slower. It should be
+possible to stay entirely in the computational algebra subsystem but the reason
+for using the symbolic subsystem is that the gcd calculations would be too slow
+in the computational algebra subsystem. Polynomial gcd is precisely the sort of
+thing that <em>should</em> be more efficient in the computational algebra subsystem
+but it is not because the polynomial rings used here have huge numbers of
+symbols like <code class="docutils literal notranslate"><span class="pre">QQ_I[x1,x2,...,x1000]</span></code>. The dense gcd algorithms are extremely
+slow in this case because each step needs to recurse through 1000 levels of
+nested lists even if the polynomials involved only have a couple of terms.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">heurisch</span></code> algorithm works around slow gcd by converting to a symbolic
+expression and then calling <code class="docutils literal notranslate"><span class="pre">cancel</span></code> (which internally converts to the
+computational algebra subsystem and back) and then converting back again to the
+original polynomial ring. The slow part ends up being often just the
+conversions back and forth between different representations but those are only
+happening to avoid the slow gcd algorithms. The end result of this is that
+“heurisch” which is the main workhorse for <code class="docutils literal notranslate"><span class="pre">integrate</span></code> in SymPy is often very
+slow as an <em>indirect</em> result of sparse polynomial gcd being slow.</p>
+<p>These things would all be made a lot faster by using python-flint but I still
+think that it is worth improving the pure Python algorithms here as well
+because it is not really that hard to make big improvements.</p>
+</section>
+<section id="python-flint">
+<h2>Python-flint<a class="headerlink" href="#python-flint" title="Link to this heading">¶</a></h2>
+<p>The python-flint library is a Python wrapper around the C library FLINT. FLINT
+is a C library for fast arithmetic and other operations with polynomials,
+integers, matrices etc and is used by many other computer algebra systems such
+as SageMath, Mathematica, Maple, OSCAR etc. FLINT itself is built on top of GMP
+and MPFR but then provides hugely expanded functionality over the top. The
+FLINT library provides fast implementations for all of the domains that I have
+mentioned above (<code class="docutils literal notranslate"><span class="pre">ZZ</span></code>, <code class="docutils literal notranslate"><span class="pre">QQ</span></code>, <code class="docutils literal notranslate"><span class="pre">GF(p)</span></code>, <code class="docutils literal notranslate"><span class="pre">ZZ[x]</span></code>, <code class="docutils literal notranslate"><span class="pre">QQ[x]</span></code> etc) and much
+more:</p>
+<p><a class="reference external" href="https://flintlib.org/">https://flintlib.org/</a></p>
+<p>The FLINT library is now maintained by Fredrik Johansson who is also the
+original author of SymPy’s <code class="docutils literal notranslate"><span class="pre">evalf</span></code> and the <code class="docutils literal notranslate"><span class="pre">mpmath</span></code> library that is SymPy’s
+only hard dependency. Fredrik went on to create <code class="docutils literal notranslate"><span class="pre">Arb</span></code>, <code class="docutils literal notranslate"><span class="pre">Calcium</span></code> and the
+<code class="docutils literal notranslate"><span class="pre">generic-rings</span></code> project. Fredrik recently took over maintainership of FLINT
+and merged all of these projects together into FLINT 3.0 (AKA MegaFLINT).
+Altogether FLINT is around 1 million lines of C code with many contributors and
+provides state of the art implementations for the sorts of things that I have
+been discussing above and much more. The FLINT codebase has a lot of widely
+used mature code but is also still under active development.</p>
+<p>The python-flint library is a wrapper around FLINT that provides a Python
+interface to a small subset of the functionality of FLINT (and Arb):</p>
+<p><a class="reference external" href="https://fredrikj.net/python-flint/">https://fredrikj.net/python-flint/</a></p>
+<p><a class="reference external" href="https://github.com/flintlib/python-flint">https://github.com/flintlib/python-flint</a></p>
+<p>Fredrik originally created python-flint but it had not been actively maintained
+having only a few releases in 2017 and 2018. Over time I have been working on
+making python-flint more usable and this has now culminated in the releases of
+python-flint 0.4.0-0.4.2 during the last month. The major changes in these
+releases are that there are now CI-built wheels for Linux, macOS and Windows
+that can be installed with <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">python-flint</span></code> as well as conda
+packages <code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">install</span> <span class="pre">-c</span> <span class="pre">conda-forge</span> <span class="pre">python-flint</span></code> (thanks to Isuru
+Fernando). There was a major Windows bug that basically made python-flint
+unusable on Windows and that is now fixed. Lastly I made a bunch of smaller
+changes to make python-flint more usable and better tested and to fix a few
+minor bugs.</p>
+<p>The end result of that work is that now python-flint is perfectly usable and
+well tested although still very incomplete in wrapping all of FLINT’s
+functionality. My own interest in working on this was to make it possible to
+use python-flint as a drop-in replacement for the pure Python implementations
+of parts of SymPy’s computational algebra subsystem. Now that python-flint is
+usable though others have become interested and there are two new active
+contributors working on expanding its functionality to add finite fields
+<code class="docutils literal notranslate"><span class="pre">GF(q)</span></code> and (critical for SymPy) multivariate sparse polynomials.</p>
+<p>To give a quick example of what it would mean in terms of speed to make use of
+python-flint let’s compare the time taken to factorise a polynomial between
+SymPy’s existing implementation and using python-flint:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">In</span> <span class="p">[</span><span class="mi">16</span><span class="p">]:</span> <span class="n">nums</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">]</span> <span class="o">*</span> <span class="mi">50</span>
+
+<span class="n">In</span> <span class="p">[</span><span class="mi">17</span><span class="p">]:</span> <span class="n">nums2</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">]</span> <span class="o">*</span> <span class="mi">50</span>
+
+<span class="n">In</span> <span class="p">[</span><span class="mi">18</span><span class="p">]:</span> <span class="n">p1</span> <span class="o">=</span> <span class="n">Poly</span><span class="p">(</span><span class="n">nums</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
+
+<span class="n">In</span> <span class="p">[</span><span class="mi">19</span><span class="p">]:</span> <span class="n">p2</span> <span class="o">=</span> <span class="n">Poly</span><span class="p">(</span><span class="n">nums2</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
+
+<span class="n">In</span> <span class="p">[</span><span class="mi">20</span><span class="p">]:</span> <span class="n">p3</span> <span class="o">=</span> <span class="n">p1</span><span class="o">*</span><span class="n">p2</span>
+
+<span class="n">In</span> <span class="p">[</span><span class="mi">21</span><span class="p">]:</span> <span class="o">%</span><span class="n">time</span> <span class="n">result</span> <span class="o">=</span> <span class="n">p3</span><span class="o">.</span><span class="n">factor_list</span><span class="p">()</span>
+<span class="n">CPU</span> <span class="n">times</span><span class="p">:</span> <span class="n">user</span> <span class="mf">7.57</span> <span class="n">s</span><span class="p">,</span> <span class="n">sys</span><span class="p">:</span> <span class="mf">10.1</span> <span class="n">ms</span><span class="p">,</span> <span class="n">total</span><span class="p">:</span> <span class="mf">7.58</span> <span class="n">s</span>
+<span class="n">Wall</span> <span class="n">time</span><span class="p">:</span> <span class="mf">7.58</span> <span class="n">s</span>
+
+<span class="n">In</span> <span class="p">[</span><span class="mi">22</span><span class="p">]:</span> <span class="kn">import</span> <span class="nn">flint</span>
+
+<span class="n">In</span> <span class="p">[</span><span class="mi">23</span><span class="p">]:</span> <span class="n">p1</span> <span class="o">=</span> <span class="n">flint</span><span class="o">.</span><span class="n">fmpz_poly</span><span class="p">(</span><span class="n">nums</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="c1"># reverse coefficient order</span>
+
+<span class="n">In</span> <span class="p">[</span><span class="mi">24</span><span class="p">]:</span> <span class="n">p2</span> <span class="o">=</span> <span class="n">flint</span><span class="o">.</span><span class="n">fmpz_poly</span><span class="p">(</span><span class="n">nums2</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+
+<span class="n">In</span> <span class="p">[</span><span class="mi">25</span><span class="p">]:</span> <span class="n">p3</span> <span class="o">=</span> <span class="n">p1</span><span class="o">*</span><span class="n">p2</span>
+
+<span class="n">In</span> <span class="p">[</span><span class="mi">26</span><span class="p">]:</span> <span class="n">p3</span><span class="o">.</span><span class="n">degree</span><span class="p">()</span>
+<span class="n">Out</span><span class="p">[</span><span class="mi">26</span><span class="p">]:</span> <span class="mi">498</span>
+
+<span class="n">In</span> <span class="p">[</span><span class="mi">27</span><span class="p">]:</span> <span class="o">%</span><span class="n">time</span> <span class="n">result</span> <span class="o">=</span> <span class="n">p3</span><span class="o">.</span><span class="n">factor</span><span class="p">()</span>
+<span class="n">CPU</span> <span class="n">times</span><span class="p">:</span> <span class="n">user</span> <span class="mf">83.1</span> <span class="n">ms</span><span class="p">,</span> <span class="n">sys</span><span class="p">:</span> <span class="mi">0</span> <span class="n">ns</span><span class="p">,</span> <span class="n">total</span><span class="p">:</span> <span class="mf">83.1</span> <span class="n">ms</span>
+<span class="n">Wall</span> <span class="n">time</span><span class="p">:</span> <span class="mf">82.3</span> <span class="n">ms</span>
+</pre></div>
+</div>
+<p>The polynomial here is of degree 500 and the factorisation takes 8 seconds with
+SymPy’s existing implementation and 80 milliseconds with python-flint which is
+a speedup of 100x. This ratio is approximately what can be expected when
+comparing an optimised C implementation with a pure Python implementation of
+the same low-level algorithm: SymPy’s existing algorithm is okay in this case
+but is limited by being implemented in Python. FLINT is not just highly
+optimised C code though, as it also uses state of the art algorithms and so in
+the cases discussed above where SymPy’s algorithms are not so good (e.g.
+polynomial gcd) the speedup can be <em>much</em> larger than 100x.</p>
+<p>Here is a comparison of factorisation time vs degree:</p>
+<img alt="../_images/time_factor.svg" src="../_images/time_factor.svg" /><p>For the timings in this plot I generate two polynomials of degree <span class="math notranslate nohighlight">\(d\)</span>
+with random integer coefficients in the range from 1 to 10, multiply them
+together and then time how long it takes to factorise the result. The plot
+compares the timings against <span class="math notranslate nohighlight">\(3d^2\)</span> for FLINT and <span class="math notranslate nohighlight">\(200d^2\)</span> for
+SymPy. Both curves show an approximately quadratic scaling but with SymPy being
+about 60x slower than FLINT up to around degree 100. Then the SymPy curve looks
+like it starts to bend upwards and gets a lot slower above degree 100. The 60x
+speed difference is the difference between a pure Python implementation of the
+low-level operations vs FLINT’s optimised C implementation. The upwards bend in
+the SymPy curve is most likely the result of some algorithmic difference and I
+think it means that for larger polynomials SymPy will become extremely slow.</p>
+<p>While both curves in the plot show approximately quadratic scaling it is worth
+noting that the worst case for <em>both</em> implementations is worse than
+<span class="math notranslate nohighlight">\(O(d^2)\)</span>. For SymPy’s algorithms the worst case is in fact exponential
+like <span class="math notranslate nohighlight">\(O(2^d)\)</span> and I am not sure exactly what it would be for FLINT but
+I think maybe the best bounds are something like <span class="math notranslate nohighlight">\(O(d^6)\)</span>. For randomly
+generated polynomials like shown here we will tend not to see these worst cases
+but that does not necessarily make them unlikely in practice. For example this
+issue shows a case where SymPy’s <code class="docutils literal notranslate"><span class="pre">minpoly</span></code> is extremely slow because
+<code class="docutils literal notranslate"><span class="pre">factor</span></code> is slow for a polynomial of degree 162:</p>
+<p><a class="reference external" href="https://github.com/sympy/sympy/issues/22400">https://github.com/sympy/sympy/issues/22400</a></p>
+<p>Using FLINT (see the change to <code class="docutils literal notranslate"><span class="pre">dup_zz_factor</span></code> below) SymPy can compute the
+operation from that issue in 300 milliseconds:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">In</span> <span class="p">[</span><span class="mi">1</span><span class="p">]:</span> <span class="o">%</span><span class="n">time</span> <span class="n">ok</span> <span class="o">=</span> <span class="n">minpoly</span><span class="p">(</span><span class="n">root</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="mi">3</span><span class="p">)</span><span class="o">+</span><span class="n">root</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">)</span><span class="o">+</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="o">+</span><span class="n">I</span><span class="o">*</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span><span class="o">/</span><span class="mi">2</span><span class="o">*</span><span class="n">root</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span><span class="mi">3</span><span class="p">))</span>
+<span class="n">CPU</span> <span class="n">times</span><span class="p">:</span> <span class="n">user</span> <span class="mi">345</span> <span class="n">ms</span><span class="p">,</span> <span class="n">sys</span><span class="p">:</span> <span class="mf">3.67</span> <span class="n">ms</span><span class="p">,</span> <span class="n">total</span><span class="p">:</span> <span class="mi">349</span> <span class="n">ms</span>
+<span class="n">Wall</span> <span class="n">time</span><span class="p">:</span> <span class="mi">347</span> <span class="n">ms</span>
+</pre></div>
+</div>
+<p>The 60x speed difference above would suggest that SymPy’s existing algorithm
+would take around 20 seconds to compute the same result but in fact it takes
+much longer than that. I’m not sure how long but it is more than 5 minutes so
+at least 1000x slower. In the issue I suggested a change that would bring this
+down to about 40 seconds so more like 100x slower which is worth doing. Also
+SymPy now has the LLL algorithm which was discussed there and so that could be
+used to speed this up.</p>
+<p>We could spend a lot of time trying to optimise SymPy’s existing algorithms and
+in some cases that is worthwhile but ultimately it will always be better to use
+python-flint when speed is needed. For many of the lower-level algorithms a
+pure Python implementation will never be able to come close to the speed of
+FLINT and so if we want SymPy users to be able to use SymPy and have state of
+the art speed then we just need to use something like python-flint. Of course
+if anyone would like to improve SymPy’s factorisation algorithm then that is
+fine and it is impressive what previous SymPy contributors have achieved while
+working only in Python. For working on making SymPy faster for end users though
+the immediate priority is to make more use of python-flint.</p>
+<p>I think that the way to think about what FLINT is is that it is like a BLAS
+library for computer algebra systems. Most scientific computing is done with
+machine precision types like 64-bit floats etc and in that context when you
+want to compute say the inverse of a matrix then you would absolutely use a
+BLAS library to do that. You might be working in Python, R or Julia or
+something but the BLAS library is written in C or Fortran and is just much
+faster than anything you could write directly. Even if you could write a fast
+implementation of BLAS in say Python there would be no benefit in doing so
+because it is better to be able to share things like that e.g. the same BLAS
+library can be used from Python, R, Julia, Matlab etc.</p>
+<p>If you were working in C you would still not write your own code to do what
+BLAS does because it is not just faster but also more reliable, more accurate,
+less buggy etc than you would likely achieve without a lot of work. In fact
+even an optimised C implementation would likely be slower than BLAS because
+your BLAS library would have not just better algorithms but also things like
+hand-crafted assembly (much like GMP does), SIMD etc, with the aim of being
+<em>faster</em> than C.</p>
+<p>Anyone who knows about BLAS libraries would say that it would be absurd to try
+to reimplement BLAS in Python when you can just use an off the shelf BLAS
+library (<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">numpy</span></code> already does this for you). This is essentially
+the same situation for computer algebra systems and libraries like FLINT. It is
+nice that SymPy has pure Python implementations of many algorithms and there
+are situations where those are useful in practice but if you want anything like
+top-end speed for CPU-heavy operations then you need to use something like
+FLINT. Then if you do use FLINT there is no actual reason why working in Python
+should be slower than anything else because if the bulk of the time is spent in
+FLINT then it will be just as fast whether you call it from Python, C or
+anything else.</p>
+<p>I will write more specifically about what is currently implemented in
+python-flint and what work is needed in a separate post. I will also write more
+about matrices in a separate post but for now I will just say that FLINT
+provides both polynomials and matrices over all of the domains mentioned above
+and SymPy could use those to achieve state of the art speeds for many
+operations. In the same way that SymPy currently uses gmpy2 to speed up <code class="docutils literal notranslate"><span class="pre">ZZ</span></code>
+and <code class="docutils literal notranslate"><span class="pre">QQ</span></code> it would be possible to speed up every part of the computational
+algebra subsystem by using python-flint. There are also many other features
+like <code class="docutils literal notranslate"><span class="pre">Arb</span></code> and <code class="docutils literal notranslate"><span class="pre">Calcium</span></code> that SymPy would benefit from but that is not the
+topic of this post.</p>
+</section>
+<section id="using-python-flint">
+<h2>Using python-flint<a class="headerlink" href="#using-python-flint" title="Link to this heading">¶</a></h2>
+<p>Since python-flint is now easily installable and usable I have added support
+for using it in SymPy. In SymPy 1.12 and earlier the <code class="docutils literal notranslate"><span class="pre">SYMPY_GROUND_TYPES</span></code>
+environment variable can be used to specify whether or not to use <code class="docutils literal notranslate"><span class="pre">gmpy2</span></code> for
+<code class="docutils literal notranslate"><span class="pre">ZZ</span></code> and <code class="docutils literal notranslate"><span class="pre">QQ</span></code>. If the environment variable is not set to anything then the
+default is to use <code class="docutils literal notranslate"><span class="pre">gmpy2</span></code> if it is installed and otherwise to use CPython’s
+<code class="docutils literal notranslate"><span class="pre">int</span></code> and SymPy’s <code class="docutils literal notranslate"><span class="pre">PythonMPQ</span></code> types as described above. With the latest
+changes on the SymPy master branch the <code class="docutils literal notranslate"><span class="pre">SYMPY_GROUND_TYPES</span></code> environment
+variable can also be set to <code class="docutils literal notranslate"><span class="pre">flint</span></code> to use python-flint instead of <code class="docutils literal notranslate"><span class="pre">gmpy2</span></code>
+(if it is installed). The PR implementing this change is:</p>
+<p><a class="reference external" href="https://github.com/sympy/sympy/pull/25474">https://github.com/sympy/sympy/pull/25474</a></p>
+<p>Using this looks like:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ SYMPY_GROUND_TYPES=flint isympy
+...
+In [1]: type(ZZ(1))
+Out[1]: flint._flint.fmpz
+</pre></div>
+</div>
+<p>The default is currently to use <code class="docutils literal notranslate"><span class="pre">gmpy2</span></code> if the environment variable is not
+set explicitly but I am considering whether the default should be changed to
+<code class="docutils literal notranslate"><span class="pre">flint</span></code> in SymPy 1.13. So far SymPy does not use enough of python-flint’s
+features to derive major benefits from it and so being conservative it is only
+used if the user opts in explicitly but that is definitely not what we would
+want longer term. (Changing the default would only potentially affect anything
+for those who already have python-flint installed which I suspect is not many
+people.)</p>
+<p>With this change SymPy can now use python-flint for <code class="docutils literal notranslate"><span class="pre">ZZ</span></code> and <code class="docutils literal notranslate"><span class="pre">QQ</span></code>. Since
+FLINT depends on GMP and uses GMP for its integer and rational number types
+using python-flint for <code class="docutils literal notranslate"><span class="pre">ZZ</span></code> and <code class="docutils literal notranslate"><span class="pre">QQ</span></code> is not really much different from
+using <code class="docutils literal notranslate"><span class="pre">gmpy2</span></code>. The main difference is that python-flint provides many more
+things and using python-flint’s elementary types for e.g. <code class="docutils literal notranslate"><span class="pre">ZZ</span></code> makes it
+easier to later add support for polynomials in e.g. <code class="docutils literal notranslate"><span class="pre">ZZ[x]</span></code>.</p>
+<p>Besides <code class="docutils literal notranslate"><span class="pre">ZZ</span></code> and <code class="docutils literal notranslate"><span class="pre">QQ</span></code> the only other thing that SymPy currently (on master)
+uses python-flint for is the internal dense implementation of <code class="docutils literal notranslate"><span class="pre">DomainMatrix</span></code>
+over <code class="docutils literal notranslate"><span class="pre">ZZ</span></code> and <code class="docutils literal notranslate"><span class="pre">QQ</span></code> and a few number theory functions that would otherwise
+be provided by <code class="docutils literal notranslate"><span class="pre">gmpy2</span></code>:</p>
+<p><a class="reference external" href="https://github.com/sympy/sympy/pull/25495">https://github.com/sympy/sympy/pull/25495</a></p>
+<p><a class="reference external" href="https://github.com/sympy/sympy/pull/25577">https://github.com/sympy/sympy/pull/25577</a></p>
+<p>I will talk more about the <code class="docutils literal notranslate"><span class="pre">DomainMatrix</span></code> changes in a separate post but for
+now the point is that SymPy can now use python-flint for a few things and it is
+now very easy to use it for more things. So far SymPy does not get a major
+benefit from this but the hard work is now done so that we can just flip a few
+switches and make some important things <em>much</em> faster.</p>
+<p>A simple demonstration of making something faster is that this change would
+make factorisation of polynomials in <code class="docutils literal notranslate"><span class="pre">ZZ[x]</span></code> faster when python-flint is
+installed (and <code class="docutils literal notranslate"><span class="pre">SYMPY_GROUND_TYPES=flint</span></code> is set):</p>
+<div class="highlight-diff notranslate"><div class="highlight"><pre><span></span><span class="gh">diff --git a/sympy/polys/factortools.py b/sympy/polys/factortools.py</span>
+<span class="gh">index de1821a89f..d9a833e6c1 100644</span>
+<span class="gd">--- a/sympy/polys/factortools.py</span>
+<span class="gi">+++ b/sympy/polys/factortools.py</span>
+<span class="gu">@@ -1,5 +1,7 @@</span>
+<span class="w"> </span>&quot;&quot;&quot;Polynomial factorization routines in characteristic zero. &quot;&quot;&quot;
+
+<span class="gi">+from sympy.external.gmpy import GROUND_TYPES</span>
+<span class="gi">+</span>
+<span class="w"> </span>from sympy.core.random import _randint
+
+<span class="w"> </span>from sympy.polys.galoistools import (
+<span class="gu">@@ -76,6 +78,12 @@</span>
+<span class="w"> </span>from math import ceil as _ceil, log as _log
+
+
+<span class="gi">+if GROUND_TYPES == &#39;flint&#39;:</span>
+<span class="gi">+    from flint import fmpz_poly</span>
+<span class="gi">+else:</span>
+<span class="gi">+    fmpz_poly = None</span>
+<span class="gi">+</span>
+<span class="gi">+</span>
+<span class="w"> </span>def dup_trial_division(f, factors, K):
+<span class="w"> </span>    &quot;&quot;&quot;
+<span class="w"> </span>    Determine multiplicities of factors for a univariate polynomial
+<span class="gu">@@ -662,6 +670,12 @@ def dup_zz_factor(f, K):</span>
+<span class="w"> </span>    .. [1] [Gathen99]_
+
+<span class="w"> </span>    &quot;&quot;&quot;
+<span class="gi">+    if GROUND_TYPES == &#39;flint&#39;:</span>
+<span class="gi">+        f_flint = fmpz_poly(f[::-1])</span>
+<span class="gi">+        cont, factors = f_flint.factor()</span>
+<span class="gi">+        factors = [(fac.coeffs()[::-1], exp) for fac, exp in factors]</span>
+<span class="gi">+        return cont, factors</span>
+<span class="gi">+</span>
+<span class="w"> </span>    cont, g = dup_primitive(f, K)
+
+<span class="w"> </span>    n = dup_degree(g)
+oscar@nuc:~/current/activ
+</pre></div>
+</div>
+<p>This simple change does not cause any outwardly observable change in behaviour
+and does not result in any test failures. It just makes one operation a lot
+faster e.g. we can now factorise a 2000 degree polynomial in 2 seconds:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">In</span> <span class="p">[</span><span class="mi">11</span><span class="p">]:</span> <span class="n">p1</span> <span class="o">=</span> <span class="n">random_poly</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="mi">1000</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>
+
+<span class="n">In</span> <span class="p">[</span><span class="mi">12</span><span class="p">]:</span> <span class="n">p2</span> <span class="o">=</span> <span class="n">random_poly</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="mi">1000</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>
+
+<span class="n">In</span> <span class="p">[</span><span class="mi">13</span><span class="p">]:</span> <span class="n">p3</span> <span class="o">=</span> <span class="n">p1</span><span class="o">.</span><span class="n">as_poly</span><span class="p">()</span> <span class="o">*</span> <span class="n">p2</span><span class="o">.</span><span class="n">as_poly</span><span class="p">()</span>
+
+<span class="n">In</span> <span class="p">[</span><span class="mi">14</span><span class="p">]:</span> <span class="n">p3</span><span class="o">.</span><span class="n">degree</span><span class="p">()</span>
+<span class="n">Out</span><span class="p">[</span><span class="mi">14</span><span class="p">]:</span> <span class="mi">2000</span>
+
+<span class="n">In</span> <span class="p">[</span><span class="mi">15</span><span class="p">]:</span> <span class="o">%</span><span class="n">time</span> <span class="n">ok</span> <span class="o">=</span> <span class="n">p3</span><span class="o">.</span><span class="n">factor_list</span><span class="p">()</span>
+<span class="n">CPU</span> <span class="n">times</span><span class="p">:</span> <span class="n">user</span> <span class="mf">2.09</span> <span class="n">s</span><span class="p">,</span> <span class="n">sys</span><span class="p">:</span> <span class="mf">2.6</span> <span class="n">ms</span><span class="p">,</span> <span class="n">total</span><span class="p">:</span> <span class="mf">2.09</span> <span class="n">s</span>
+<span class="n">Wall</span> <span class="n">time</span><span class="p">:</span> <span class="mf">2.09</span> <span class="n">s</span>
+</pre></div>
+</div>
+<p>I have not waited long enough to see how long this operation would take with
+SymPy’s existing implementation but it is definitely a lot longer than 2
+seconds.</p>
+<p>It would be easy to speed up specific functions like <code class="docutils literal notranslate"><span class="pre">dup_zz_factor</span></code>
+piecemeal like this and it probably is worth doing that to some extent. All
+polynomial operations would be a lot faster though if python-flint was used and
+converting to and from <code class="docutils literal notranslate"><span class="pre">fmpz_poly</span></code> is relatively slow compared to many
+<code class="docutils literal notranslate"><span class="pre">fmpz_poly</span></code> operations. The best approach then would be to swap out a layer
+somewhere in the poly system. In this case I think what makes the most sense is
+to make a wrapper class that holds an <code class="docutils literal notranslate"><span class="pre">fmpz_poly</span></code> internally but provides the
+same interface as <code class="docutils literal notranslate"><span class="pre">DMP</span></code>. Then <code class="docutils literal notranslate"><span class="pre">Poly</span></code> could use this class internally and
+the result would be that all polynomial operations would be <em>much</em> faster
+including just basic arithmetic like addition and multiplication. The structure
+would then be like:</p>
+<ol class="arabic simple">
+<li><p>Domains (<code class="docutils literal notranslate"><span class="pre">ZZ</span></code> …)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dup_*</span></code> (SymPy) or <code class="docutils literal notranslate"><span class="pre">fmpz_poly</span></code> (python-flint)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">DMP</span></code> (SymPy) or <code class="docutils literal notranslate"><span class="pre">FlintDMP</span></code> (python-flint)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Poly</span></code> (holds <code class="docutils literal notranslate"><span class="pre">DMP</span></code> or <code class="docutils literal notranslate"><span class="pre">FlintDMP</span></code> internally)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">factor</span></code> etc</p></li>
+</ol>
+<p>If SymPy did not already have existing implementations for many of the things
+that python-flint provides then using python-flint would bring a massive
+expansion in SymPy’s capabilities. There are other things that
+FLINT/python-flint have that SymPy does not currently have but those are not
+the topic here. For the sorts of things that I discussed above SymPy already
+has existing implementations of the algorithms but they are just a lot slower.
+SymPy will need to keep those pure Python implementations (so that it can still
+be used without python-flint) so making use of python-flint’s capabilities for
+polynomials is really just about speed. In that sense it is not really
+necessary to try to use all of FLINT’s features in SymPy because the speed
+benefit mostly comes just from using it for the lowest levels: there is no big
+penalty in writing higher-level algorithms in Python rather than C.</p>
+<p>The biggest bang-for-buck that SymPy can get from FLINT would be from using
+FLINT’s sparse multivariate polynomials. Multivariate polynomials are crucial
+for many of the things that SymPy users want to do and SymPy’s existing
+implementations are slow because of being pure Python or dense or because of
+have algorithms that are far from optimal in some cases like polynomial gcd.
+The FLINT library has state of the art algorithms for sparse polynomial
+arithmetic, gcd, factorisation etc which are (or should be) the bottlenecks for
+many things in SymPy like solving systems of equations, matrix operations,
+integration, simplification etc. Unfortunately python-flint does not yet expose
+FLINT’s sparse polynomials but that is being worked on and I hope that the next
+release of python-flint will provide this. This one feature would bring
+enormous speedups to SymPy for many things that users want to do.</p>
+<p>Probably if SymPy was using python-flint’s existing features and also its
+sparse polynomials then the potential for simple game-changing speedups of
+relevance to SymPy users from using FLINT’s other algebra features would be a
+lot smaller. That is not to say that it would not be worth adding those other
+features but just that after the sparse polynomials the next biggest benefits
+for SymPy users would come from using other features like <code class="docutils literal notranslate"><span class="pre">Arb</span></code> rather than
+more of FLINT’s algebra features.</p>
+</section>
+<section id="what-needs-to-be-done">
+<h2>What needs to be done<a class="headerlink" href="#what-needs-to-be-done" title="Link to this heading">¶</a></h2>
+<p>Some significant work has already been done to make it possible to use
+python-flint to make SymPy faster but there is still a lot of work to do. Also
+there are things that should be improved in SymPy’s existing algorithms or code
+structure to make it faster without python-flint and/or to make it easier to
+leverage python-flint for improving SymPy’s polynomial capabilities.</p>
+<p>This is what can be done now without python-flint or with python-flint as it
+stands today:</p>
+<ol class="arabic simple">
+<li><p>Some existing operations and algorithms should be improved like polynomial
+gcd (port PRS to sparse polynomials, investigate modulargcd module etc).</p></li>
+<li><p>The sparse polynomial representation should be used more widely in SymPy
+whether that means adding <code class="docutils literal notranslate"><span class="pre">SMP</span></code> at the level below <code class="docutils literal notranslate"><span class="pre">Poly</span></code> or introducing
+a new <code class="docutils literal notranslate"><span class="pre">SPoly</span></code> or <code class="docutils literal notranslate"><span class="pre">MPoly</span></code> class at the <code class="docutils literal notranslate"><span class="pre">Poly</span></code> level instead.</p></li>
+<li><p>A wrapper class like <code class="docutils literal notranslate"><span class="pre">FlintDMP</span></code> or something should be added that can wrap
+python-flint’s dense univariate polynomial types for use by <code class="docutils literal notranslate"><span class="pre">Poly</span></code> so that
+it can use python-flint internally for arithmetic, <code class="docutils literal notranslate"><span class="pre">factor</span></code> etc over
+<code class="docutils literal notranslate"><span class="pre">ZZ</span></code> and <code class="docutils literal notranslate"><span class="pre">QQ</span></code>.</p></li>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">ANP</span></code> class used for algebraic number fields should be able to wrap a
+FLINT <code class="docutils literal notranslate"><span class="pre">fmpq_poly</span></code> internally because that is a situation where dense
+univariate polynomials are very important in the domain system (perhaps it
+should wrap <code class="docutils literal notranslate"><span class="pre">DMP</span></code> or <code class="docutils literal notranslate"><span class="pre">FlintDMP</span></code>).</p></li>
+<li><p>Algebraic number fields should be reimplemented based on sparse polynomials
+rather than primitive elements though (this is a much bigger task than
+anything else mentioned here).</p></li>
+<li><p>Domains like <code class="docutils literal notranslate"><span class="pre">ZZ_I[x,</span> <span class="pre">y]</span></code> should be reimplemented over the top of sparse
+polynomials like <code class="docutils literal notranslate"><span class="pre">ZZ[x,</span> <span class="pre">y]</span></code> rather than directly over <code class="docutils literal notranslate"><span class="pre">ZZ_I</span></code> - this
+would already speed them up but would also prepare them to get faster with
+python-flint.</p></li>
+</ol>
+<p>There is an important design decision to be made about whether to use the
+<code class="docutils literal notranslate"><span class="pre">SMP</span></code> approach or the <code class="docutils literal notranslate"><span class="pre">SPoly</span></code> approach described above. Everything else
+listed above is unambiguous and is just work that should be done.</p>
+<p>Another area where python-flint can immediately bring big improvements is
+<code class="docutils literal notranslate"><span class="pre">GF(p)</span></code> since python-flint provides an implementation of <code class="docutils literal notranslate"><span class="pre">GF(p)</span></code> as well as
+matrices and polynomials over <code class="docutils literal notranslate"><span class="pre">GF(p)</span></code>. I have not listed this above just
+because for what most users want to do the need for <code class="docutils literal notranslate"><span class="pre">GF(p)</span></code> is mainly in the
+internals of things like factorisation and if SymPy gets those algorithms from
+FLINT then it depends much less on its own <code class="docutils literal notranslate"><span class="pre">GF(p)</span></code> domain. (If anyone else is
+interested in this though it would not be hard to make use of python-flint
+here.)</p>
+<p>These changes require the sparse polynomials to be added in python-flint and
+are the absolute top priority items that would make the biggest difference to
+the things that users want to do:</p>
+<ol class="arabic simple" start="7">
+<li><p>FLINT’s sparse polynomials should be exposed in python-flint.</p></li>
+<li><p>SymPy should use python-flint’s sparse polynomials internally for domains
+like <code class="docutils literal notranslate"><span class="pre">ZZ[x,</span> <span class="pre">y]</span></code>.</p></li>
+<li><p>SymPy should use python-flint’s sparse polynomials for expensive operations
+involving multivariate polynomials like <code class="docutils literal notranslate"><span class="pre">factor</span></code>, <code class="docutils literal notranslate"><span class="pre">gcd</span></code> etc.</p></li>
+<li><p>SymPy should use python-flint’s sparse polynomials internally for <code class="docutils literal notranslate"><span class="pre">Poly</span></code>.
+This would be easy if SymPy already used its own sparse representation
+(i.e. <code class="docutils literal notranslate"><span class="pre">SMP</span></code> or <code class="docutils literal notranslate"><span class="pre">SPoly</span></code>).</p></li>
+</ol>
+<p>All sorts of things would be made much, much faster by making these changes. In
+many cases the speed differences would be beyond the sort of thing that it
+makes sense to express as e.g. 10x faster because really a calculation that is
+currently so slow as to be effectively impossible would become achievable in a
+reasonable time.</p>
+<p>There are reasons beyond just speed for most of these changes as well. It is
+also worth noting that any work on python-flint benefits the wider Python
+ecosystem as well and that leveraging FLINT means sharing efforts across
+language ecosystems like Python and Julia as well as other computer algebra
+systems.</p>
+<p>Some of the changes I have described above are not really that difficult to do
+and could be done quite soon. Others are bigger more long-term projects. For me
+the top ticket is adding FLINT’s sparse polynomials to python-flint and then
+having SymPy use them for the domains which I don’t think would be particularly
+difficult.</p>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../index.html">blog</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Towards a new SymPy</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="post1.html">Towards a new SymPy: part 1 - Outline</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Towards a new SymPy: part 2 - Polynomials</a></li>
+</ul>
+</li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+  <li><a href="index.html">Towards a new SymPy</a><ul>
+      <li>Previous: <a href="post1.html" title="previous chapter">Towards a new SymPy: part 1 - Outline</a></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2023, Oscar Benjamin.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 7.2.5</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.13</a>
+      
+      |
+      <a href="../_sources/czi/post2.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
