@@ -748,3 +748,13 @@ done going forward. Briefly though:
 - The computational algebra subsystem should be made faster both by improving
   its algorithms and also by leveraging Flint.
 - The computational algebra subsystem should be used more by the rest of SymPy.
+
+.. raw:: html
+
+    <script src="https://utteranc.es/client.js"
+            repo="oscarbenjamin/blog"
+            issue-term="pathname"
+            theme="github-light"
+            crossorigin="anonymous"
+            async>
+    </script>

@@ -1380,7 +1380,7 @@ difficult.
 .. raw:: html
 
     <script src="https://utteranc.es/client.js"
-            repo="[ENTER REPO HERE]"
+            repo="oscarbenjamin/blog"
             issue-term="pathname"
             theme="github-light"
             crossorigin="anonymous"
