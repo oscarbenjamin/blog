@@ -28,9 +28,25 @@ As before I am writing this with the intention that it should be to some extent
 understandable to non SymPy developers. The primary intended audience though is
 other SymPy developers because I want them to understand the significance of
 the work done so far and the changes that I think are needed for the future.
-This post is quite long mainly because there are a lot of details about the
-computational algebra subsystem that I want the intended audience to
-understand.
+
+TLDR
+----
+
+The short summary of this post is that:
+
+- SymPy's polynomial code is good and is well structured although a minor
+  redesign is needed to make use of sparse polynomials.
+- There are some algorithms that could be improved like polynomial gcd but most
+  are pretty good although limited in speed by being pure Python.
+- It is now possible to use python-flint to bring state of the art speeds to
+  SymPy's polynomial operations.
+- Some work is needed to enable big speedups from python-flint but from here it
+  is not difficult to do that.
+
+The rest of this post is quite long mainly just because there are a lot of
+details about the computational algebra subsystem that need to be understood in
+order to follow the detail of what the problems are and what can or should be
+done to improve things.
 
 Integers and rationals
 ----------------------
@@ -1166,10 +1182,10 @@ using ``gmpy2``. The main difference is that python-flint provides many more
 things and using python-flint's elementary types for e.g. ``ZZ`` makes it
 easier to later add support for polynomials in e.g. ``ZZ[x]``.
 
-Besides ``ZZ`` and ``QQ`` the only other thing that SymPy currently (on master)
-uses python-flint for is the internal dense implementation of ``DomainMatrix``
-over ``ZZ`` and ``QQ`` and a few number theory functions that would otherwise
-be provided by ``gmpy2``:
+Besides ``ZZ`` and ``QQ`` the only other things that SymPy currently (on
+master) uses python-flint for are the internal dense implementation of
+``DomainMatrix`` over ``ZZ`` and ``QQ`` and a few number theory functions that
+would otherwise be provided by ``gmpy2``:
 
 https://github.com/sympy/sympy/pull/25495
 
@@ -1249,16 +1265,16 @@ SymPy's existing implementation but it is definitely a lot longer than 2
 seconds.
 
 It would be easy to speed up specific functions like ``dup_zz_factor``
-piecemeal like this and it probably is worth doing that to some extent. All
-polynomial operations would be a lot faster though if python-flint was used and
-converting to and from ``fmpz_poly`` is relatively slow compared to many
-``fmpz_poly`` operations. The best approach then would be to swap out a layer
-somewhere in the poly system. In this case I think what makes the most sense is
-to make a wrapper class that holds an ``fmpz_poly`` internally but provides the
-same interface as ``DMP``. Then ``Poly`` could use this class internally and
-the result would be that all polynomial operations would be *much* faster
-including just basic arithmetic like addition and multiplication. The structure
-would then be like:
+piecemeal like this and it is worth doing that to some extent. All polynomial
+operations would be a lot faster though if python-flint was used and converting
+to and from ``fmpz_poly`` is relatively slow compared to many ``fmpz_poly``
+operations. The best approach then would be to swap out a layer somewhere in
+the poly system. In this case I think what makes the most sense is to make a
+wrapper class that holds an ``fmpz_poly`` internally but provides the same
+interface as ``DMP``. Then ``Poly`` could use this class internally and the
+result would be that all polynomial operations would be *much* faster including
+just basic arithmetic like addition and multiplication. The structure would
+then be like:
 
 1. Domains (``ZZ`` ...)
 2. ``dup_*`` (SymPy) or ``fmpz_poly`` (python-flint)
@@ -1295,10 +1311,10 @@ enormous speedups to SymPy for many things that users want to do.
 Probably if SymPy was using python-flint's existing features and also its
 sparse polynomials then the potential for simple game-changing speedups of
 relevance to SymPy users from using FLINT's other algebra features would be a
-lot smaller. That is not to say that it would not be worth adding those other
-features but just that after the sparse polynomials the next biggest benefits
-for SymPy users would come from using other features like ``Arb`` rather than
-more of FLINT's algebra features.
+lot smaller. It would definitely be worth adding those other features but after
+the sparse polynomials the next biggest benefits for SymPy users would come
+from using other features like ``Arb`` rather than more of FLINT's algebra
+features.
 
 What needs to be done
 ---------------------

@@ -59,10 +59,25 @@ python-flint.</p>
 <p>As before I am writing this with the intention that it should be to some extent
 understandable to non SymPy developers. The primary intended audience though is
 other SymPy developers because I want them to understand the significance of
-the work done so far and the changes that I think are needed for the future.
-This post is quite long mainly because there are a lot of details about the
-computational algebra subsystem that I want the intended audience to
-understand.</p>
+the work done so far and the changes that I think are needed for the future.</p>
+<section id="tldr">
+<h2>TLDR<a class="headerlink" href="#tldr" title="Link to this heading">¶</a></h2>
+<p>The short summary of this post is that:</p>
+<ul class="simple">
+<li><p>SymPy’s polynomial code is good and is well structured although a minor
+redesign is needed to make use of sparse polynomials.</p></li>
+<li><p>There are some algorithms that could be improved like polynomial gcd but most
+are pretty good although limited in speed by being pure Python.</p></li>
+<li><p>It is now possible to use python-flint to bring state of the art speeds to
+SymPy’s polynomial operations.</p></li>
+<li><p>Some work is needed to enable big speedups from python-flint but from here it
+is not difficult to do that.</p></li>
+</ul>
+<p>The rest of this post is quite long mainly just because there are a lot of
+details about the computational algebra subsystem that need to be understood in
+order to follow the detail of what the problems are and what can or should be
+done to improve things.</p>
+</section>
 <section id="integers-and-rationals">
 <h2>Integers and rationals<a class="headerlink" href="#integers-and-rationals" title="Link to this heading">¶</a></h2>
 <p>First, I will give a brief overview of the computational algebra subsystem. In
@@ -1116,10 +1131,10 @@ using python-flint for <code class="docutils literal notranslate"><span class="p
 using <code class="docutils literal notranslate"><span class="pre">gmpy2</span></code>. The main difference is that python-flint provides many more
 things and using python-flint’s elementary types for e.g. <code class="docutils literal notranslate"><span class="pre">ZZ</span></code> makes it
 easier to later add support for polynomials in e.g. <code class="docutils literal notranslate"><span class="pre">ZZ[x]</span></code>.</p>
-<p>Besides <code class="docutils literal notranslate"><span class="pre">ZZ</span></code> and <code class="docutils literal notranslate"><span class="pre">QQ</span></code> the only other thing that SymPy currently (on master)
-uses python-flint for is the internal dense implementation of <code class="docutils literal notranslate"><span class="pre">DomainMatrix</span></code>
-over <code class="docutils literal notranslate"><span class="pre">ZZ</span></code> and <code class="docutils literal notranslate"><span class="pre">QQ</span></code> and a few number theory functions that would otherwise
-be provided by <code class="docutils literal notranslate"><span class="pre">gmpy2</span></code>:</p>
+<p>Besides <code class="docutils literal notranslate"><span class="pre">ZZ</span></code> and <code class="docutils literal notranslate"><span class="pre">QQ</span></code> the only other things that SymPy currently (on
+master) uses python-flint for are the internal dense implementation of
+<code class="docutils literal notranslate"><span class="pre">DomainMatrix</span></code> over <code class="docutils literal notranslate"><span class="pre">ZZ</span></code> and <code class="docutils literal notranslate"><span class="pre">QQ</span></code> and a few number theory functions that
+would otherwise be provided by <code class="docutils literal notranslate"><span class="pre">gmpy2</span></code>:</p>
 <p><a class="reference external" href="https://github.com/sympy/sympy/pull/25495">https://github.com/sympy/sympy/pull/25495</a></p>
 <p><a class="reference external" href="https://github.com/sympy/sympy/pull/25577">https://github.com/sympy/sympy/pull/25577</a></p>
 <p>I will talk more about the <code class="docutils literal notranslate"><span class="pre">DomainMatrix</span></code> changes in a separate post but for
@@ -1192,16 +1207,16 @@ faster e.g. we can now factorise a 2000 degree polynomial in 2 seconds:</p>
 SymPy’s existing implementation but it is definitely a lot longer than 2
 seconds.</p>
 <p>It would be easy to speed up specific functions like <code class="docutils literal notranslate"><span class="pre">dup_zz_factor</span></code>
-piecemeal like this and it probably is worth doing that to some extent. All
-polynomial operations would be a lot faster though if python-flint was used and
-converting to and from <code class="docutils literal notranslate"><span class="pre">fmpz_poly</span></code> is relatively slow compared to many
-<code class="docutils literal notranslate"><span class="pre">fmpz_poly</span></code> operations. The best approach then would be to swap out a layer
-somewhere in the poly system. In this case I think what makes the most sense is
-to make a wrapper class that holds an <code class="docutils literal notranslate"><span class="pre">fmpz_poly</span></code> internally but provides the
-same interface as <code class="docutils literal notranslate"><span class="pre">DMP</span></code>. Then <code class="docutils literal notranslate"><span class="pre">Poly</span></code> could use this class internally and
-the result would be that all polynomial operations would be <em>much</em> faster
-including just basic arithmetic like addition and multiplication. The structure
-would then be like:</p>
+piecemeal like this and it is worth doing that to some extent. All polynomial
+operations would be a lot faster though if python-flint was used and converting
+to and from <code class="docutils literal notranslate"><span class="pre">fmpz_poly</span></code> is relatively slow compared to many <code class="docutils literal notranslate"><span class="pre">fmpz_poly</span></code>
+operations. The best approach then would be to swap out a layer somewhere in
+the poly system. In this case I think what makes the most sense is to make a
+wrapper class that holds an <code class="docutils literal notranslate"><span class="pre">fmpz_poly</span></code> internally but provides the same
+interface as <code class="docutils literal notranslate"><span class="pre">DMP</span></code>. Then <code class="docutils literal notranslate"><span class="pre">Poly</span></code> could use this class internally and the
+result would be that all polynomial operations would be <em>much</em> faster including
+just basic arithmetic like addition and multiplication. The structure would
+then be like:</p>
 <ol class="arabic simple">
 <li><p>Domains (<code class="docutils literal notranslate"><span class="pre">ZZ</span></code> …)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">dup_*</span></code> (SymPy) or <code class="docutils literal notranslate"><span class="pre">fmpz_poly</span></code> (python-flint)</p></li>
@@ -1236,10 +1251,10 @@ enormous speedups to SymPy for many things that users want to do.</p>
 <p>Probably if SymPy was using python-flint’s existing features and also its
 sparse polynomials then the potential for simple game-changing speedups of
 relevance to SymPy users from using FLINT’s other algebra features would be a
-lot smaller. That is not to say that it would not be worth adding those other
-features but just that after the sparse polynomials the next biggest benefits
-for SymPy users would come from using other features like <code class="docutils literal notranslate"><span class="pre">Arb</span></code> rather than
-more of FLINT’s algebra features.</p>
+lot smaller. It would definitely be worth adding those other features but after
+the sparse polynomials the next biggest benefits for SymPy users would come
+from using other features like <code class="docutils literal notranslate"><span class="pre">Arb</span></code> rather than more of FLINT’s algebra
+features.</p>
 </section>
 <section id="what-needs-to-be-done">
 <h2>What needs to be done<a class="headerlink" href="#what-needs-to-be-done" title="Link to this heading">¶</a></h2>
