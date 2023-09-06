@@ -1376,3 +1376,13 @@ and could be done quite soon. Others are bigger more long-term projects. For me
 the top ticket is adding FLINT's sparse polynomials to python-flint and then
 having SymPy use them for the domains which I don't think would be particularly
 difficult.
+
+.. raw:: html
+
+    <script src="https://utteranc.es/client.js"
+            repo="[ENTER REPO HERE]"
+            issue-term="pathname"
+            theme="github-light"
+            crossorigin="anonymous"
+            async>
+    </script>
